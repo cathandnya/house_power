@@ -363,3 +363,38 @@ def test_notifier_no_token():
     from notifier import LineNotifier
     notifier = LineNotifier(token="", cooldown_minutes=5)
     assert notifier.token == ""
+
+
+# --- Static Files Tests (PWA) ---
+
+
+@pytest.mark.asyncio
+async def test_manifest_json(transport):
+    """manifest.jsonが取得できる"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/static/manifest.json")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "name" in data
+    assert "icons" in data
+
+
+@pytest.mark.asyncio
+async def test_service_worker(transport):
+    """Service Workerが取得できる"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/static/sw.js")
+
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+
+
+@pytest.mark.asyncio
+async def test_app_icon(transport):
+    """アプリアイコンが取得できる"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/static/icon-192.png")
+
+    assert response.status_code == 200
+    assert "image/png" in response.headers["content-type"]

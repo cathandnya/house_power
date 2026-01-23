@@ -10,6 +10,8 @@ Wi-SUN Bルートでスマートメーターから直接電力消費量を取得
 - **REST API**: 外部システムとの連携が容易
 - **WebSocket**: リアルタイムデータ配信
 - **Mockモード**: Wi-SUNアダプタなしで動作テスト可能
+- **PWA対応**: スマホのホーム画面にアプリとして追加可能
+- **ダークモード**: システム設定に連動
 
 ## アーキテクチャ
 
@@ -149,6 +151,10 @@ house_power/
 │   ├── mock_client.py       # Mockクライアント（テスト用）
 │   ├── api.py               # REST API / WebSocket
 │   ├── notifier.py          # LINE Notify通知
+│   ├── static/              # PWA用静的ファイル
+│   │   ├── manifest.json
+│   │   ├── sw.js
+│   │   └── icon-*.png
 │   ├── templates/
 │   │   └── index.html       # Webダッシュボード
 │   ├── tests/
@@ -190,6 +196,25 @@ house_power/
   "timestamp": "2025-01-23T12:34:56.789"
 }
 ```
+
+## スマホアプリ化（PWA）
+
+iPhone/Androidでホーム画面にアプリとして追加できます。
+
+### iPhone (Safari)
+
+1. Safariでダッシュボードにアクセス
+2. 共有ボタン（□↑）をタップ
+3. 「ホーム画面に追加」を選択
+4. 「追加」をタップ
+
+### Android (Chrome)
+
+1. Chromeでダッシュボードにアクセス
+2. メニュー（⋮）→「ホーム画面に追加」
+3. 「追加」をタップ
+
+追加後はアプリとして起動でき、ブラウザのUIなしで表示されます。
 
 ## トラブルシューティング
 

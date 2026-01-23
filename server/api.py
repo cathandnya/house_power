@@ -6,6 +6,7 @@ REST API / WebSocket サーバー
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from collections import deque
 from datetime import datetime
@@ -18,6 +19,11 @@ from notifier import LineNotifier
 
 # アプリケーション
 app = FastAPI(title="House Power Monitor API")
+
+# 静的ファイル（PWA用）
+static_path = Path(__file__).parent / "static"
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # 最新データ
 current_data: dict = {
