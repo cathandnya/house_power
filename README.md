@@ -6,8 +6,10 @@ Wi-SUN Bルートでスマートメーターから直接電力消費量を取得
 
 - **リアルタイム更新**: 約3秒間隔で電力値を取得
 - **Webダッシュボード**: ブラウザでリアルタイム表示・グラフ
+- **LINE通知**: 電力が閾値を超えたらLINE Notifyで通知
 - **REST API**: 外部システムとの連携が容易
 - **WebSocket**: リアルタイムデータ配信
+- **Mockモード**: Wi-SUNアダプタなしで動作テスト可能
 - **Nature Remo E liteと併用可能**
 
 ## アーキテクチャ
@@ -79,9 +81,24 @@ nano config.py
 # Wi-SUN Bルート認証（電力会社から届いたもの）
 BROUTE_ID = "00000000000000000000000000000000"
 BROUTE_PASSWORD = "XXXXXXXXXXXX"
+
+# LINE Notify（オプション）
+LINE_NOTIFY_TOKEN = "your_token_here"
 ```
 
-### 4. 実行
+### 4. LINE Notify設定（オプション）
+
+電力が閾値を超えたときにLINEで通知を受け取れます。
+
+1. https://notify-bot.line.me/ にアクセス
+2. LINEアカウントでログイン
+3. 「トークンを発行する」をクリック
+4. トークン名（例: 電力モニター）を入力し、通知先を選択
+5. 発行されたトークンを `config.py` の `LINE_NOTIFY_TOKEN` に設定
+
+閾値はWebダッシュボードの「通知設定」から変更できます。
+
+### 5. 実行
 
 ```bash
 python main.py
@@ -89,7 +106,7 @@ python main.py
 
 ブラウザで `http://<Raspberry PiのIP>:8000` にアクセス
 
-### 5. 自動起動設定（オプション）
+### 6. 自動起動設定（オプション）
 
 ```bash
 # サービスファイルを作成
@@ -113,6 +130,25 @@ sudo systemctl enable house-power
 sudo systemctl start house-power
 ```
 
+## 開発・テスト
+
+### Mockモード
+
+Wi-SUNアダプタなしでサーバーをテストできます。
+
+```bash
+python main.py --mock
+```
+
+時間帯に応じたリアルな電力データが生成されます。
+
+### ユニットテスト
+
+```bash
+cd server
+pytest tests/ -v
+```
+
 ## ファイル構成
 
 ```
@@ -122,10 +158,17 @@ house_power/
 │   ├── config.py            # 設定（※.gitignore対象）
 │   ├── config.py.example    # 設定サンプル
 │   ├── wisun_client.py      # Wi-SUN/ECHONET Lite通信
+│   ├── mock_client.py       # Mockクライアント（テスト用）
 │   ├── api.py               # REST API / WebSocket
+│   ├── notifier.py          # LINE Notify通知
 │   ├── templates/
 │   │   └── index.html       # Webダッシュボード
+│   ├── tests/
+│   │   └── test_api.py      # ユニットテスト
 │   └── requirements.txt
+├── .github/
+│   └── workflows/
+│       └── test.yml         # GitHub Actions CI
 ├── .gitignore
 └── README.md
 ```
@@ -140,6 +183,8 @@ house_power/
 | `/api/power` | GET | 現在の電力値（JSON） |
 | `/api/history` | GET | 過去1時間の履歴 |
 | `/api/status` | GET | サーバーステータス |
+| `/api/settings` | GET | 通知設定の取得 |
+| `/api/settings` | POST | 通知設定の更新 |
 
 ### WebSocket
 

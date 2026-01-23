@@ -20,8 +20,13 @@ from api import (
     current_data,
     connected_clients,
     set_mock_mode,
+    set_alert_threshold,
+    set_alert_enabled,
     _mock_mode,
+    _alert_threshold,
+    _alert_enabled,
 )
+import api
 
 
 @pytest.fixture(autouse=True)
@@ -34,6 +39,9 @@ def reset_state():
     history.clear()
     connected_clients.clear()
     set_mock_mode(False)
+    set_alert_threshold(4000)
+    set_alert_enabled(True)
+    api.notifier = None
     yield
 
 
@@ -242,3 +250,116 @@ def test_mock_client_power_variation():
 
     # ランダムノイズがあるので、10回中少なくとも2つは異なる値になるはず
     assert len(unique_powers) > 1
+
+
+# --- Settings API Tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_settings_default(transport):
+    """デフォルト設定の取得"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["alert_threshold"] == 4000
+    assert data["alert_enabled"] is True
+    assert data["line_notify_configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_settings_threshold(transport):
+    """閾値の更新"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/settings",
+            json={"threshold": 3000}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["alert_threshold"] == 3000
+    assert data["alert_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_settings_enabled(transport):
+    """通知有効/無効の更新"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/settings",
+            json={"enabled": False}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["alert_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_settings_both(transport):
+    """閾値と有効/無効を同時に更新"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/settings",
+            json={"threshold": 5000, "enabled": False}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["alert_threshold"] == 5000
+    assert data["alert_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_settings_line_notify_configured(transport):
+    """LINE Notify設定済みの確認"""
+    from notifier import LineNotifier
+    api.notifier = LineNotifier(token="test_token")
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["line_notify_configured"] is True
+
+
+# --- Notifier Tests ---
+
+
+def test_notifier_can_notify_initial():
+    """初期状態では通知可能"""
+    from notifier import LineNotifier
+    notifier = LineNotifier(token="test", cooldown_minutes=5)
+    assert notifier.can_notify() is True
+
+
+def test_notifier_cooldown():
+    """クールダウン中は通知不可"""
+    from notifier import LineNotifier
+    from datetime import datetime, timedelta
+
+    notifier = LineNotifier(token="test", cooldown_minutes=5)
+    notifier.last_notified = datetime.now()
+
+    assert notifier.can_notify() is False
+
+
+def test_notifier_cooldown_expired():
+    """クールダウン終了後は通知可能"""
+    from notifier import LineNotifier
+    from datetime import datetime, timedelta
+
+    notifier = LineNotifier(token="test", cooldown_minutes=5)
+    notifier.last_notified = datetime.now() - timedelta(minutes=10)
+
+    assert notifier.can_notify() is True
+
+
+def test_notifier_no_token():
+    """トークンなしでは通知不可"""
+    from notifier import LineNotifier
+    notifier = LineNotifier(token="", cooldown_minutes=5)
+    assert notifier.token == ""

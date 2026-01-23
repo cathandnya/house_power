@@ -20,3 +20,11 @@ POWER_THRESHOLD = 4000  # W
 # True: Wi-SUNアダプタなしでモックデータで動作
 # False: 実際のWi-SUNアダプタを使用（デフォルト）
 MOCK_MODE = False
+
+# === LINE Notify ===
+# https://notify-bot.line.me/ でトークンを発行
+# 空文字の場合は通知無効
+LINE_NOTIFY_TOKEN = ""
+
+# 通知クールダウン（分）- 連続通知を防止
+NOTIFY_COOLDOWN_MINUTES = 5

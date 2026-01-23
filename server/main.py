@@ -24,7 +24,9 @@ except ImportError:
     print("BルートID/パスワードを設定してください")
     sys.exit(1)
 
-from api import app, update_power_data, broadcast_power_data, set_mock_mode
+from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify
+import api
+from notifier import LineNotifier
 
 
 def parse_args():
@@ -98,8 +100,12 @@ async def power_loop():
                 # WebSocketで配信
                 await broadcast_power_data()
 
-                # ログ出力
+                # 閾値チェック・通知
                 power = data.get("instant_power")
+                if power is not None:
+                    await check_and_notify(power)
+
+                # ログ出力
                 if power is not None:
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Power: {power}W")
 
@@ -120,10 +126,20 @@ async def main():
     # api.pyにmockモードを設定
     set_mock_mode(mock_mode)
 
+    # LINE Notifier初期化
+    token = getattr(config, "LINE_NOTIFY_TOKEN", "")
+    if token:
+        cooldown = getattr(config, "NOTIFY_COOLDOWN_MINUTES", 5)
+        api.notifier = LineNotifier(token=token, cooldown_minutes=cooldown)
+
     print("=" * 50)
     print("家庭電力モニター サーバー")
     if mock_mode:
         print("*** MOCK MODE ***")
+    if token:
+        print("LINE Notify: Enabled")
+    else:
+        print("LINE Notify: Disabled (no token)")
     print("=" * 50)
 
     # クライアント初期化

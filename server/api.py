@@ -6,12 +6,15 @@ REST API / WebSocket サーバー
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 import asyncio
 import json
+
+from notifier import LineNotifier
 
 # アプリケーション
 app = FastAPI(title="House Power Monitor API")
@@ -21,7 +24,7 @@ current_data: dict = {
     "instant_power": None,
     "instant_current_r": None,
     "instant_current_t": None,
-    "timestamp": None
+    "timestamp": None,
 }
 
 # 履歴データ（過去1時間分、3秒間隔 = 1200件）
@@ -33,6 +36,13 @@ connected_clients: list[WebSocket] = []
 # Mockモードフラグ
 _mock_mode: bool = False
 
+# アラート設定
+_alert_threshold: int = 4000  # デフォルト閾値 (W)
+_alert_enabled: bool = True
+
+# LINE Notifier（main.pyで初期化）
+notifier: Optional[LineNotifier] = None
+
 
 def set_mock_mode(mock: bool):
     """mockモードを設定"""
@@ -40,7 +50,35 @@ def set_mock_mode(mock: bool):
     _mock_mode = mock
 
 
-def update_power_data(power: int | None, current_r: float | None, current_t: float | None):
+def set_alert_threshold(threshold: int):
+    """閾値を設定"""
+    global _alert_threshold
+    _alert_threshold = threshold
+
+
+def set_alert_enabled(enabled: bool):
+    """アラート有効/無効を設定"""
+    global _alert_enabled
+    _alert_enabled = enabled
+
+
+async def check_and_notify(power: int):
+    """閾値チェックして通知"""
+    if not _alert_enabled:
+        return
+    if notifier is None:
+        return
+    if power >= _alert_threshold:
+        await notifier.send(
+            f"\n⚡ 電力使用量アラート\n"
+            f"現在: {power:,}W\n"
+            f"閾値: {_alert_threshold:,}W"
+        )
+
+
+def update_power_data(
+    power: int | None, current_r: float | None, current_t: float | None
+):
     """電力データを更新"""
     current_data["instant_power"] = power
     current_data["instant_current_r"] = current_r
@@ -71,6 +109,7 @@ async def broadcast_power_data():
 
 
 # --- REST API ---
+
 
 @app.get("/api/power")
 async def get_power():
@@ -103,7 +142,39 @@ async def get_status():
     }
 
 
+# --- 設定API ---
+
+
+class SettingsUpdate(BaseModel):
+    threshold: Optional[int] = None
+    enabled: Optional[bool] = None
+
+
+@app.get("/api/settings")
+async def get_settings():
+    """通知設定を取得"""
+    return {
+        "alert_threshold": _alert_threshold,
+        "alert_enabled": _alert_enabled,
+        "line_notify_configured": notifier is not None and bool(notifier.token),
+    }
+
+
+@app.post("/api/settings")
+async def update_settings(settings: SettingsUpdate):
+    """通知設定を更新"""
+    global _alert_threshold, _alert_enabled
+
+    if settings.threshold is not None:
+        _alert_threshold = settings.threshold
+    if settings.enabled is not None:
+        _alert_enabled = settings.enabled
+
+    return await get_settings()
+
+
 # --- WebSocket ---
+
 
 @app.websocket("/ws/power")
 async def websocket_power(websocket: WebSocket):
@@ -132,6 +203,7 @@ async def websocket_power(websocket: WebSocket):
 
 # --- ダッシュボード ---
 
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     """Webダッシュボード"""
@@ -139,4 +211,6 @@ async def dashboard():
     if template_path.exists():
         return FileResponse(template_path)
     else:
-        return HTMLResponse("<h1>Dashboard not found</h1><p>templates/index.html が見つかりません</p>")
+        return HTMLResponse(
+            "<h1>Dashboard not found</h1><p>templates/index.html が見つかりません</p>"
+        )
