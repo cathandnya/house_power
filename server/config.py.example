@@ -1,0 +1,22 @@
+# Wi-SUN Bルート認証（電力会社から届いたもの）
+BROUTE_ID = "00000000000000000000000000000000"
+BROUTE_PASSWORD = "XXXXXXXXXXXX"
+
+# シリアルポート
+SERIAL_PORT = "/dev/ttyUSB0"
+BAUD_RATE = 115200
+
+# APIサーバー
+API_HOST = "0.0.0.0"
+API_PORT = 8000
+
+# 更新間隔
+POLL_INTERVAL = 3  # 秒
+
+# 警告閾値（ダッシュボード表示用）
+POWER_THRESHOLD = 4000  # W
+
+# === Mock Mode ===
+# True: Wi-SUNアダプタなしでモックデータで動作
+# False: 実際のWi-SUNアダプタを使用（デフォルト）
+MOCK_MODE = False

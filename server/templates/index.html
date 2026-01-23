@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家庭電力モニター</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.875rem;
+            color: #666;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+
+        .status-dot.connected {
+            background: #22c55e;
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .power-display {
+            text-align: center;
+            padding: 32px 0;
+        }
+
+        .power-value {
+            font-size: 4rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .power-unit {
+            font-size: 1.5rem;
+            font-weight: 400;
+            color: #666;
+        }
+
+        .power-value.warning {
+            color: #f59e0b;
+        }
+
+        .power-value.danger {
+            color: #ef4444;
+        }
+
+        .current-display {
+            display: flex;
+            justify-content: center;
+            gap: 48px;
+            margin-top: 16px;
+        }
+
+        .current-item {
+            text-align: center;
+        }
+
+        .current-label {
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .current-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .threshold-bar {
+            margin-top: 24px;
+        }
+
+        .threshold-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .threshold-track {
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .threshold-fill {
+            height: 100%;
+            background: #3b82f6;
+            border-radius: 4px;
+            transition: width 0.3s ease, background 0.3s ease;
+        }
+
+        .threshold-fill.warning {
+            background: #f59e0b;
+        }
+
+        .threshold-fill.danger {
+            background: #ef4444;
+        }
+
+        .chart-container {
+            height: 200px;
+            margin-top: 16px;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timestamp {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #666;
+            margin-top: 16px;
+        }
+
+        .no-data {
+            color: #999;
+            font-style: italic;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+
+            .power-value {
+                font-size: 3rem;
+            }
+
+            .current-display {
+                gap: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>家庭電力モニター</h1>
+            <div class="status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">接続中...</span>
+            </div>
+        </header>
+
+        <div class="card">
+            <div class="power-display">
+                <div class="power-value" id="powerValue">
+                    <span class="no-data">---</span>
+                </div>
+                <div class="power-unit">W</div>
+            </div>
+
+            <div class="current-display">
+                <div class="current-item">
+                    <div class="current-label">R相電流</div>
+                    <div class="current-value" id="currentR">--- A</div>
+                </div>
+                <div class="current-item">
+                    <div class="current-label">T相電流</div>
+                    <div class="current-value" id="currentT">--- A</div>
+                </div>
+            </div>
+
+            <div class="threshold-bar">
+                <div class="threshold-label">
+                    <span>使用量</span>
+                    <span id="thresholdPercent">0%</span>
+                </div>
+                <div class="threshold-track">
+                    <div class="threshold-fill" id="thresholdFill" style="width: 0%"></div>
+                </div>
+                <div class="threshold-label" style="margin-top: 4px;">
+                    <span></span>
+                    <span>閾値: <span id="thresholdValue">4000</span> W</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span>📈</span>
+                <span>過去1時間の推移</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="powerChart"></canvas>
+            </div>
+        </div>
+
+        <div class="timestamp">
+            最終更新: <span id="lastUpdate">---</span>
+        </div>
+    </div>
+
+    <script>
+        // 設定
+        const THRESHOLD = 4000; // W
+        const WS_RECONNECT_INTERVAL = 3000;
+
+        // 要素
+        const powerValue = document.getElementById('powerValue');
+        const currentR = document.getElementById('currentR');
+        const currentT = document.getElementById('currentT');
+        const thresholdPercent = document.getElementById('thresholdPercent');
+        const thresholdFill = document.getElementById('thresholdFill');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const lastUpdate = document.getElementById('lastUpdate');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        // Chart.js設定
+        const ctx = document.getElementById('powerChart').getContext('2d');
+        const chartData = {
+            labels: [],
+            datasets: [{
+                label: '電力 (W)',
+                data: [],
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0
+            }]
+        };
+
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            maxTicksLimit: 6,
+                            font: {
+                                size: 11
+                            }
+                        }
+                    },
+                    y: {
+                        display: true,
+                        beginAtZero: true,
+                        grid: {
+                            color: '#f0f0f0'
+                        },
+                        ticks: {
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+
+        // 閾値表示更新
+        thresholdValue.textContent = THRESHOLD.toLocaleString();
+
+        // データ更新
+        function updateDisplay(data) {
+            // 電力値
+            if (data.instant_power !== null) {
+                const power = data.instant_power;
+                powerValue.textContent = power.toLocaleString();
+
+                // 警告色
+                powerValue.classList.remove('warning', 'danger');
+                if (power >= THRESHOLD) {
+                    powerValue.classList.add('danger');
+                } else if (power >= THRESHOLD * 0.8) {
+                    powerValue.classList.add('warning');
+                }
+
+                // 閾値バー
+                const percent = Math.min(100, (power / THRESHOLD) * 100);
+                thresholdPercent.textContent = Math.round(percent) + '%';
+                thresholdFill.style.width = percent + '%';
+
+                thresholdFill.classList.remove('warning', 'danger');
+                if (percent >= 100) {
+                    thresholdFill.classList.add('danger');
+                } else if (percent >= 80) {
+                    thresholdFill.classList.add('warning');
+                }
+            } else {
+                powerValue.innerHTML = '<span class="no-data">---</span>';
+            }
+
+            // 電流値
+            if (data.instant_current_r !== null) {
+                currentR.textContent = data.instant_current_r.toFixed(1) + ' A';
+            } else {
+                currentR.textContent = '--- A';
+            }
+
+            if (data.instant_current_t !== null) {
+                currentT.textContent = data.instant_current_t.toFixed(1) + ' A';
+            } else {
+                currentT.textContent = '--- A';
+            }
+
+            // タイムスタンプ
+            if (data.timestamp) {
+                const date = new Date(data.timestamp);
+                lastUpdate.textContent = date.toLocaleString('ja-JP');
+            }
+
+            // グラフ更新
+            if (data.instant_power !== null && data.timestamp) {
+                const time = new Date(data.timestamp).toLocaleTimeString('ja-JP', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                chartData.labels.push(time);
+                chartData.datasets[0].data.push(data.instant_power);
+
+                // 最大1200件（1時間分）保持
+                if (chartData.labels.length > 1200) {
+                    chartData.labels.shift();
+                    chartData.datasets[0].data.shift();
+                }
+
+                chart.update('none');
+            }
+        }
+
+        // WebSocket接続
+        let ws = null;
+
+        function connect() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${location.host}/ws/power`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                statusDot.classList.add('connected');
+                statusDot.classList.remove('disconnected');
+                statusText.textContent = '接続中';
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    updateDisplay(data);
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            };
+
+            ws.onclose = () => {
+                statusDot.classList.remove('connected');
+                statusDot.classList.add('disconnected');
+                statusText.textContent = '再接続中...';
+
+                // 再接続
+                setTimeout(connect, WS_RECONNECT_INTERVAL);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                ws.close();
+            };
+        }
+
+        // 履歴データ取得
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const history = await response.json();
+
+                history.forEach(data => {
+                    if (data.instant_power !== null && data.timestamp) {
+                        const time = new Date(data.timestamp).toLocaleTimeString('ja-JP', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        chartData.labels.push(time);
+                        chartData.datasets[0].data.push(data.instant_power);
+                    }
+                });
+
+                chart.update('none');
+            } catch (e) {
+                console.error('Failed to load history:', e);
+            }
+        }
+
+        // 初期化
+        loadHistory();
+        connect();
+    </script>
+</body>
+</html>
