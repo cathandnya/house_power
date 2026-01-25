@@ -139,11 +139,7 @@ async def power_loop():
 
                 # 電力値が有効な場合のみ更新・配信
                 if power is not None:
-                    update_power_data(
-                        power=power,
-                        current_r=data.get("instant_current_r"),
-                        current_t=data.get("instant_current_t"),
-                    )
+                    update_power_data(power)
                     await broadcast_power_data()
                     await check_and_notify(power)
                     logging.info(f"Power: {power}W")

@@ -28,8 +28,6 @@ if static_path.exists():
 # 最新データ
 current_data: dict = {
     "instant_power": None,
-    "instant_current_r": None,
-    "instant_current_t": None,
     "timestamp": None,
 }
 
@@ -41,15 +39,6 @@ connection_info: dict = {
     "ipv6_addr": None,
     "rssi": None,
     "rssi_quality": None,
-}
-
-# 積算電力量データ
-energy_data: dict = {
-    "cumulative_energy": None,
-    "cumulative_energy_reverse": None,
-    "fixed_energy": None,
-    "energy_unit": None,
-    "timestamp": None,
 }
 
 # 履歴データ
@@ -110,13 +99,9 @@ async def check_and_notify(power: int):
         )
 
 
-def update_power_data(
-    power: int | None, current_r: float | None, current_t: float | None
-):
+def update_power_data(power: int | None):
     """電力データを更新"""
     current_data["instant_power"] = power
-    current_data["instant_current_r"] = current_r
-    current_data["instant_current_t"] = current_t
     current_data["timestamp"] = datetime.now().isoformat()
 
     # 履歴に追加
@@ -186,19 +171,6 @@ def update_connection_info(info: dict):
     """接続情報を更新"""
     global connection_info
     connection_info.update(info)
-
-
-@app.get("/api/energy")
-async def get_energy():
-    """積算電力量を取得"""
-    return energy_data
-
-
-def update_energy_data(data: dict):
-    """積算電力量を更新"""
-    global energy_data
-    energy_data.update(data)
-    energy_data["timestamp"] = datetime.now().isoformat()
 
 
 # --- 設定API ---

@@ -4,9 +4,9 @@ Wi-SUN Bルートでスマートメーターから直接電力消費量を取得
 
 ## 特徴
 
-- **リアルタイム更新**: 5秒間隔で瞬時電力・電流を取得
-- **積算電力量**: 30分ごとに買電・売電の積算値を取得
+- **リアルタイム更新**: 5秒間隔で瞬時電力を取得
 - **接続品質監視**: RSSI（電波強度）をリアルタイム表示
+- **自動再接続**: 接続断を検知して自動復帰
 - **Webダッシュボード**: ブラウザでリアルタイム表示・グラフ
 - **LINE通知**: 電力が閾値を超えたらLINE Notifyで通知
 - **REST API**: 外部システムとの連携が容易
@@ -76,7 +76,6 @@ BROUTE_PASSWORD = "XXXXXXXXXXXX"
 
 # 更新間隔
 POLL_INTERVAL = 5  # 瞬時電力の取得間隔（秒）
-ENERGY_POLL_INTERVAL = 1800  # 積算電力量の取得間隔（秒）
 
 # LINE Notify（オプション）
 LINE_NOTIFY_TOKEN = "your_token_here"
@@ -180,10 +179,9 @@ house_power/
 | エンドポイント | メソッド | 説明 |
 |---------------|---------|------|
 | `/` | GET | Webダッシュボード |
-| `/api/power` | GET | 現在の電力値（瞬時電力・電流） |
-| `/api/energy` | GET | 積算電力量（買電・売電） |
+| `/api/power` | GET | 現在の電力値（瞬時電力） |
 | `/api/connection` | GET | 接続情報（RSSI・チャンネル等） |
-| `/api/history` | GET | 過去1時間の履歴 |
+| `/api/history` | GET | 過去の履歴 |
 | `/api/status` | GET | サーバーステータス |
 | `/api/settings` | GET/POST | 通知設定の取得・更新 |
 
@@ -199,23 +197,7 @@ house_power/
 ```json
 {
   "instant_power": 1052,
-  "instant_current_r": 6.0,
-  "instant_current_t": 5.0,
   "timestamp": "2026-01-25T10:36:26.316186"
-}
-```
-
-#### `/api/energy`
-```json
-{
-  "cumulative_energy": 5890.6,
-  "cumulative_energy_reverse": 0.6,
-  "fixed_energy": {
-    "timestamp": "2026-01-25 10:30:00",
-    "energy": 5890.5
-  },
-  "energy_unit": 0.1,
-  "timestamp": "2026-01-25T10:35:46.060267"
 }
 ```
 

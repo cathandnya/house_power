@@ -33,7 +33,6 @@ class WiSUNClient:
 
     # EPC（ECHONET Liteプロパティコード）
     EPC_INSTANT_POWER = "E7"     # 瞬時電力計測値
-    EPC_INSTANT_CURRENT = "E8"   # 瞬時電流計測値
     EPC_CUMULATIVE_ENERGY = "E0" # 積算電力量（正方向）
     EPC_CUMULATIVE_ENERGY_REV = "E3"  # 積算電力量（逆方向・売電）
     EPC_CUMULATIVE_ENERGY_UNIT = "E1" # 積算電力量単位
@@ -63,7 +62,7 @@ class WiSUNClient:
         self.last_rssi: Optional[int] = None  # 最後に受信したRSSI (dBm)
         self.energy_unit: Optional[float] = None  # 積算電力量単位 (kWh)
         self.consecutive_timeouts: int = 0  # 連続タイムアウト回数
-        self.max_timeouts_before_reconnect: int = 3  # 再接続までの許容回数
+        self.max_timeouts_before_reconnect: int = 2  # 再接続までの許容回数
         self._needs_reconnect: bool = False  # 即座に再接続が必要かどうか
 
     def open(self) -> bool:
@@ -271,8 +270,8 @@ class WiSUNClient:
                 if "EVENT 25" in line:
                     logging.info("Reconnected successfully!")
                     self.consecutive_timeouts = 0
-                    # バッファクリア
-                    time.sleep(0.5)
+                    # PANAセッション安定待ち＆バッファクリア
+                    time.sleep(2)
                     while self.ser and self.ser.in_waiting > 0:
                         self.ser.read(self.ser.in_waiting)
                     return True
@@ -360,9 +359,9 @@ class WiSUNClient:
             logging.error(f"_send_echonet: write error: {e}")
             return None
 
-        # 応答待ち
+        # 応答待ち（5秒タイムアウト）
         start_time = time.time()
-        while time.time() - start_time < 10:
+        while time.time() - start_time < 5:
             if self.ser.in_waiting > 0:
                 try:
                     line = self.ser.readline().decode('utf-8', errors='ignore').strip()
@@ -373,9 +372,10 @@ class WiSUNClient:
                 if line:
                     logging.debug(f"_send_echonet: recv line={line[:80]}...")
 
-                # EVENT 29: PANAセッション切断通知
+                # EVENT 29: PANAセッション切断通知（ライフタイム期限切れ等）
                 if line.startswith("EVENT 29"):
-                    logging.error("PANA session disconnected (EVENT 29)")
+                    logging.error("PANA session disconnected (EVENT 29), triggering reconnect")
+                    self._needs_reconnect = True
                     return None
 
                 # EVENT 21: 送信結果 (EVENT 21 <IPv6> <SIDE> <RESULT>)
@@ -415,12 +415,27 @@ class WiSUNClient:
                     if result is not None:
                         self.consecutive_timeouts = 0  # 成功したらリセット
                         return result
+                    else:
+                        logging.debug(f"ERXUDP ignored: EPC mismatch or parse failed (expected={epc}, data={data[:40]}...)")
             else:
                 time.sleep(0.1)
 
         logging.warning(f"_send_echonet: timeout for EPC={epc}")
         self.consecutive_timeouts += 1
         logging.info(f"Consecutive timeouts: {self.consecutive_timeouts}/{self.max_timeouts_before_reconnect}")
+
+        # 連続タイムアウトが閾値に達したら即座に再接続してリトライ
+        if self.consecutive_timeouts >= self.max_timeouts_before_reconnect:
+            logging.warning("Threshold reached, attempting immediate reconnect...")
+            if self.reconnect():
+                self.consecutive_timeouts = 0
+                # 再接続成功したら即座にリトライ
+                logging.info("Retrying after reconnect...")
+                return self._send_echonet(epc)
+            else:
+                logging.error("Immediate reconnect failed")
+                self.consecutive_timeouts = 0
+
         return None
 
     def _parse_echonet_response(self, data: str, expected_epc: str) -> Optional[str]:
@@ -475,30 +490,6 @@ class WiSUNClient:
             if value >= 0x80000000:
                 value -= 0x100000000
             return value
-        return None
-
-    def get_instant_current(self) -> Optional[tuple[float, float]]:
-        """
-        瞬時電流を取得
-
-        Returns:
-            (R相電流, T相電流) のタプル（A）。取得失敗時はNone
-        """
-        edt = self._send_echonet(self.EPC_INSTANT_CURRENT)
-        if edt and len(edt) == 8:
-            # R相: 符号付き16ビット整数（0.1A単位）
-            r_raw = int(edt[0:4], 16)
-            if r_raw >= 0x8000:
-                r_raw -= 0x10000
-            r_current = r_raw / 10.0
-
-            # T相: 符号付き16ビット整数（0.1A単位）
-            t_raw = int(edt[4:8], 16)
-            if t_raw >= 0x8000:
-                t_raw -= 0x10000
-            t_current = t_raw / 10.0
-
-            return (r_current, t_current)
         return None
 
     def _get_energy_unit(self) -> Optional[float]:
@@ -612,17 +603,9 @@ class WiSUNClient:
         電力データを取得
 
         Returns:
-            {
-                "instant_power": 瞬時電力(W),
-                "instant_current_r": R相電流(A),
-                "instant_current_t": T相電流(A)
-            }
+            {"instant_power": 瞬時電力(W)}
         """
-        data = {
-            "instant_power": None,
-            "instant_current_r": None,
-            "instant_current_t": None
-        }
+        data = {"instant_power": None}
 
         # EVENT 21失敗または連続タイムアウトで再接続を試行
         if self._needs_reconnect or self.consecutive_timeouts >= self.max_timeouts_before_reconnect:
@@ -644,12 +627,6 @@ class WiSUNClient:
         power = self.get_instant_power()
         if power is not None:
             data["instant_power"] = power
-
-        # 瞬時電流（無効化：リクエスト削減のため）
-        # current = self.get_instant_current()
-        # if current is not None:
-        #     data["instant_current_r"] = current[0]
-        #     data["instant_current_t"] = current[1]
 
         return data
 
@@ -751,9 +728,7 @@ if __name__ == "__main__":
         print("\n--- Getting power data ---")
         for i in range(10):
             data = client.get_power_data()
-            print(f"Power: {data['instant_power']}W, "
-                  f"R: {data['instant_current_r']}A, "
-                  f"T: {data['instant_current_t']}A")
+            print(f"Power: {data['instant_power']}W")
             time.sleep(3)
 
         client.close()
