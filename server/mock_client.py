@@ -46,18 +46,8 @@ class MockWiSUNClient:
         """
         power = random.randint(500, 5500)
 
-        # 電流計算（単相3線式: R相・T相に分散）
-        # 電力 = 電圧(100V) × 電流 として簡易計算
-        total_current = power / 100.0
-        # R相とT相に不均等に分散（60:40 ~ 40:60）
-        r_ratio = random.uniform(0.4, 0.6)
-        current_r = round(total_current * r_ratio, 1)
-        current_t = round(total_current * (1 - r_ratio), 1)
-
         return {
             "instant_power": power,
-            "instant_current_r": current_r,
-            "instant_current_t": current_t,
         }
 
     def get_connection_info(self) -> dict:

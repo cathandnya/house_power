@@ -17,11 +17,9 @@ from api import (
     app,
     update_power_data,
     update_connection_info,
-    update_energy_data,
     history,
     current_data,
     connection_info,
-    energy_data,
     connected_clients,
     set_mock_mode,
     set_alert_threshold,
@@ -38,8 +36,6 @@ import api
 def reset_state():
     """各テスト前に状態をリセット"""
     current_data["instant_power"] = None
-    current_data["instant_current_r"] = None
-    current_data["instant_current_t"] = None
     current_data["timestamp"] = None
     connection_info["channel"] = None
     connection_info["pan_id"] = None
@@ -47,11 +43,6 @@ def reset_state():
     connection_info["ipv6_addr"] = None
     connection_info["rssi"] = None
     connection_info["rssi_quality"] = None
-    energy_data["cumulative_energy"] = None
-    energy_data["cumulative_energy_reverse"] = None
-    energy_data["fixed_energy"] = None
-    energy_data["energy_unit"] = None
-    energy_data["timestamp"] = None
     history.clear()
     connected_clients.clear()
     set_mock_mode(False)
@@ -80,15 +71,13 @@ async def test_get_power_initial(transport):
     assert response.status_code == 200
     data = response.json()
     assert data["instant_power"] is None
-    assert data["instant_current_r"] is None
-    assert data["instant_current_t"] is None
     assert data["timestamp"] is None
 
 
 @pytest.mark.asyncio
 async def test_get_power_after_update(transport):
     """update_power_data後は値が取得できる"""
-    update_power_data(1500, 8.5, 7.2)
+    update_power_data(1500)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/power")
@@ -96,8 +85,6 @@ async def test_get_power_after_update(transport):
     assert response.status_code == 200
     data = response.json()
     assert data["instant_power"] == 1500
-    assert data["instant_current_r"] == 8.5
-    assert data["instant_current_t"] == 7.2
     assert data["timestamp"] is not None
 
 
@@ -116,9 +103,9 @@ async def test_get_history_empty(transport):
 async def test_get_history_with_data(transport):
     """履歴データの取得"""
     # 3件のデータを追加
-    update_power_data(1000, 5.0, 5.0)
-    update_power_data(1500, 7.5, 7.5)
-    update_power_data(2000, 10.0, 10.0)
+    update_power_data(1000)
+    update_power_data(1500)
+    update_power_data(2000)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/history")
@@ -136,7 +123,7 @@ async def test_get_history_with_limit(transport):
     """limitパラメータで件数制限"""
     # 5件のデータを追加
     for i in range(5):
-        update_power_data(1000 + i * 100, 5.0, 5.0)
+        update_power_data(1000 + i * 100)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/history?limit=3")
@@ -181,7 +168,7 @@ async def test_get_status_with_mock_mode(transport):
 @pytest.mark.asyncio
 async def test_get_status_with_data(transport):
     """データ追加後のステータス"""
-    update_power_data(1500, 8.5, 7.2)
+    update_power_data(1500)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/status")
@@ -274,15 +261,13 @@ async def test_websocket_connection():
     from starlette.testclient import TestClient
 
     # 初期データを設定
-    update_power_data(1500, 8.5, 7.2)
+    update_power_data(1500)
 
     with TestClient(app) as client:
         with client.websocket_connect("/ws/power") as websocket:
             # 接続直後に現在値が送信される
             data = websocket.receive_json()
             assert data["instant_power"] == 1500
-            assert data["instant_current_r"] == 8.5
-            assert data["instant_current_t"] == 7.2
 
 
 # --- MockWiSUNClient Tests ---
@@ -307,14 +292,10 @@ def test_mock_client_get_power_data():
 
     # 必要なキーが存在する
     assert "instant_power" in data
-    assert "instant_current_r" in data
-    assert "instant_current_t" in data
 
     # 値が妥当な範囲
     assert isinstance(data["instant_power"], int)
     assert data["instant_power"] > 0
-    assert isinstance(data["instant_current_r"], float)
-    assert isinstance(data["instant_current_t"], float)
 
 
 def test_mock_client_power_variation():
@@ -410,49 +391,6 @@ def test_mock_client_get_energy_data():
     # fixed_energyの構造確認
     assert "timestamp" in data["fixed_energy"]
     assert "energy" in data["fixed_energy"]
-
-
-# --- Energy API Tests ---
-
-
-@pytest.mark.asyncio
-async def test_get_energy_initial(transport):
-    """初期状態では積算電力量は全てNone"""
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/energy")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["cumulative_energy"] is None
-    assert data["cumulative_energy_reverse"] is None
-    assert data["fixed_energy"] is None
-    assert data["energy_unit"] is None
-
-
-@pytest.mark.asyncio
-async def test_get_energy_after_update(transport):
-    """update_energy_data後は値が取得できる"""
-    update_energy_data({
-        "cumulative_energy": 123.4,
-        "cumulative_energy_reverse": 45.6,
-        "fixed_energy": {
-            "timestamp": "2024-01-15 12:30:00",
-            "energy": 122.5
-        },
-        "energy_unit": 0.1
-    })
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/energy")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["cumulative_energy"] == 123.4
-    assert data["cumulative_energy_reverse"] == 45.6
-    assert data["fixed_energy"]["timestamp"] == "2024-01-15 12:30:00"
-    assert data["fixed_energy"]["energy"] == 122.5
-    assert data["energy_unit"] == 0.1
-    assert data["timestamp"] is not None
 
 
 # --- Settings API Tests ---
