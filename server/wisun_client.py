@@ -410,13 +410,17 @@ class WiSUNClient:
                     # ユニキャスト宛のレスポンスのみ処理（マルチキャストFF02:はスキップ）
                     if dest.startswith("FF02:"):
                         continue
+                    # ECHONET Liteヘッダチェック（1081で始まらないデータはスキップ）
+                    if not data.startswith("1081"):
+                        logging.debug(f"ERXUDP ignored: not ECHONET Lite (data={data[:20]}...)")
+                        continue
                     # ECHONET Liteレスポンスをパース
                     result = self._parse_echonet_response(data, epc)
                     if result is not None:
                         self.consecutive_timeouts = 0  # 成功したらリセット
                         return result
                     else:
-                        logging.debug(f"ERXUDP ignored: EPC mismatch or parse failed (expected={epc}, data={data[:40]}...)")
+                        logging.debug(f"ERXUDP ignored: EPC mismatch (expected={epc}, data={data[:40]}...)")
             else:
                 time.sleep(0.1)
 
@@ -429,6 +433,12 @@ class WiSUNClient:
             logging.warning("Threshold reached, attempting immediate reconnect...")
             if self.reconnect():
                 self.consecutive_timeouts = 0
+                # リトライ前にバッファを再度クリア（遅延到着データ対策）
+                if self.ser:
+                    time.sleep(0.5)
+                    while self.ser.in_waiting > 0:
+                        discarded = self.ser.read(self.ser.in_waiting)
+                        logging.debug(f"Discarded {len(discarded)} bytes before retry")
                 # 再接続成功したら即座にリトライ
                 logging.info("Retrying after reconnect...")
                 return self._send_echonet(epc)
