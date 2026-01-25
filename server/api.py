@@ -43,6 +43,15 @@ connection_info: dict = {
     "rssi_quality": None,
 }
 
+# 積算電力量データ
+energy_data: dict = {
+    "cumulative_energy": None,
+    "cumulative_energy_reverse": None,
+    "fixed_energy": None,
+    "energy_unit": None,
+    "timestamp": None,
+}
+
 # 履歴データ（過去1時間分、3秒間隔 = 1200件）
 history: deque = deque(maxlen=1200)
 
@@ -168,6 +177,19 @@ def update_connection_info(info: dict):
     """接続情報を更新"""
     global connection_info
     connection_info.update(info)
+
+
+@app.get("/api/energy")
+async def get_energy():
+    """積算電力量を取得"""
+    return energy_data
+
+
+def update_energy_data(data: dict):
+    """積算電力量を更新"""
+    global energy_data
+    energy_data.update(data)
+    energy_data["timestamp"] = datetime.now().isoformat()
 
 
 # --- 設定API ---

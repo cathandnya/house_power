@@ -24,7 +24,7 @@ except ImportError:
     print("BルートID/パスワードを設定してください")
     sys.exit(1)
 
-from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info
+from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, update_energy_data
 import api
 from notifier import LineNotifier
 
@@ -119,6 +119,32 @@ async def power_loop():
         await asyncio.sleep(config.POLL_INTERVAL)
 
 
+async def energy_loop():
+    """積算電力量取得ループ"""
+    global wisun_client, running
+
+    # 取得間隔（デフォルト1800秒=30分）
+    interval = getattr(config, "ENERGY_POLL_INTERVAL", 1800)
+
+    # 初回は少し待ってから開始
+    await asyncio.sleep(10)
+
+    while running:
+        try:
+            if wisun_client and hasattr(wisun_client, 'get_energy_data'):
+                energy = wisun_client.get_energy_data()
+                update_energy_data(energy)
+
+                # ログ出力
+                if energy.get("cumulative_energy") is not None:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Energy: {energy['cumulative_energy']:.1f}kWh")
+
+        except Exception as e:
+            print(f"Error in energy loop: {e}")
+
+        await asyncio.sleep(interval)
+
+
 async def main():
     """メイン関数"""
     global wisun_client, running
@@ -170,6 +196,7 @@ async def main():
 
     # 電力取得タスクを開始
     power_task = asyncio.create_task(power_loop())
+    energy_task = asyncio.create_task(energy_loop())
 
     # APIサーバー起動
     server_config = uvicorn.Config(
@@ -184,6 +211,7 @@ async def main():
     finally:
         running = False
         power_task.cancel()
+        energy_task.cancel()
 
         if wisun_client:
             wisun_client.close()

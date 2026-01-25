@@ -17,9 +17,11 @@ from api import (
     app,
     update_power_data,
     update_connection_info,
+    update_energy_data,
     history,
     current_data,
     connection_info,
+    energy_data,
     connected_clients,
     set_mock_mode,
     set_alert_threshold,
@@ -44,6 +46,11 @@ def reset_state():
     connection_info["ipv6_addr"] = None
     connection_info["rssi"] = None
     connection_info["rssi_quality"] = None
+    energy_data["cumulative_energy"] = None
+    energy_data["cumulative_energy_reverse"] = None
+    energy_data["fixed_energy"] = None
+    energy_data["energy_unit"] = None
+    energy_data["timestamp"] = None
     history.clear()
     connected_clients.clear()
     set_mock_mode(False)
@@ -375,6 +382,75 @@ def test_mock_client_connection_info_rssi_quality():
             assert quality == "fair"
         else:
             assert quality == "poor"
+
+
+def test_mock_client_get_energy_data():
+    """MockWiSUNClientの積算電力量取得テスト"""
+    from mock_client import MockWiSUNClient
+
+    client = MockWiSUNClient()
+    client.connect()
+
+    data = client.get_energy_data()
+
+    # 必要なキーが存在する
+    assert "cumulative_energy" in data
+    assert "cumulative_energy_reverse" in data
+    assert "fixed_energy" in data
+    assert "energy_unit" in data
+
+    # 値が設定されている
+    assert isinstance(data["cumulative_energy"], float)
+    assert data["cumulative_energy"] > 0
+    assert isinstance(data["cumulative_energy_reverse"], float)
+    assert data["energy_unit"] == 0.1
+
+    # fixed_energyの構造確認
+    assert "timestamp" in data["fixed_energy"]
+    assert "energy" in data["fixed_energy"]
+
+
+# --- Energy API Tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_energy_initial(transport):
+    """初期状態では積算電力量は全てNone"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/energy")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cumulative_energy"] is None
+    assert data["cumulative_energy_reverse"] is None
+    assert data["fixed_energy"] is None
+    assert data["energy_unit"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_energy_after_update(transport):
+    """update_energy_data後は値が取得できる"""
+    update_energy_data({
+        "cumulative_energy": 123.4,
+        "cumulative_energy_reverse": 45.6,
+        "fixed_energy": {
+            "timestamp": "2024-01-15 12:30:00",
+            "energy": 122.5
+        },
+        "energy_unit": 0.1
+    })
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/energy")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cumulative_energy"] == 123.4
+    assert data["cumulative_energy_reverse"] == 45.6
+    assert data["fixed_energy"]["timestamp"] == "2024-01-15 12:30:00"
+    assert data["fixed_energy"]["energy"] == 122.5
+    assert data["energy_unit"] == 0.1
+    assert data["timestamp"] is not None
 
 
 # --- Settings API Tests ---

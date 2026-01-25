@@ -33,7 +33,10 @@ class WiSUNClient:
     # EPC（ECHONET Liteプロパティコード）
     EPC_INSTANT_POWER = "E7"     # 瞬時電力計測値
     EPC_INSTANT_CURRENT = "E8"   # 瞬時電流計測値
-    EPC_CUMULATIVE_ENERGY = "E0" # 積算電力量
+    EPC_CUMULATIVE_ENERGY = "E0" # 積算電力量（正方向）
+    EPC_CUMULATIVE_ENERGY_REV = "E3"  # 積算電力量（逆方向・売電）
+    EPC_CUMULATIVE_ENERGY_UNIT = "E1" # 積算電力量単位
+    EPC_CUMULATIVE_ENERGY_FIXED = "EA" # 定時積算電力量（正方向）
 
     def __init__(self, port: str, broute_id: str, broute_pwd: str,
                  baud_rate: int = 115200, cache_file: Optional[str] = None):
@@ -57,6 +60,7 @@ class WiSUNClient:
         self.ipv6_addr: Optional[str] = None
         self.scan_result: Optional[ScanResult] = None
         self.last_rssi: Optional[int] = None  # 最後に受信したRSSI (dBm)
+        self.energy_unit: Optional[float] = None  # 積算電力量単位 (kWh)
 
     def open(self) -> bool:
         """シリアルポートを開く"""
@@ -413,6 +417,112 @@ class WiSUNClient:
             return (r_current, t_current)
         return None
 
+    def _get_energy_unit(self) -> Optional[float]:
+        """
+        積算電力量単位を取得
+
+        Returns:
+            単位（kWh）。例: 0.1, 0.01, 1.0 など
+        """
+        if self.energy_unit is not None:
+            return self.energy_unit
+
+        edt = self._send_echonet(self.EPC_CUMULATIVE_ENERGY_UNIT)
+        if edt and len(edt) == 2:
+            code = int(edt, 16)
+            # 0x00=1kWh, 0x01=0.1kWh, 0x02=0.01kWh, 0x03=0.001kWh
+            # 0x04=0.0001kWh, 0x0A=10kWh, 0x0B=100kWh, 0x0C=1000kWh, 0x0D=10000kWh
+            unit_map = {
+                0x00: 1.0,
+                0x01: 0.1,
+                0x02: 0.01,
+                0x03: 0.001,
+                0x04: 0.0001,
+                0x0A: 10.0,
+                0x0B: 100.0,
+                0x0C: 1000.0,
+                0x0D: 10000.0,
+            }
+            self.energy_unit = unit_map.get(code, 0.1)  # デフォルト0.1kWh
+            return self.energy_unit
+        return None
+
+    def get_cumulative_energy(self) -> Optional[float]:
+        """
+        積算電力量（正方向）を取得
+
+        Returns:
+            積算電力量（kWh）。取得失敗時はNone
+        """
+        unit = self._get_energy_unit()
+        if unit is None:
+            unit = 0.1  # デフォルト
+
+        edt = self._send_echonet(self.EPC_CUMULATIVE_ENERGY)
+        if edt and len(edt) == 8:
+            # 符号なし32ビット整数
+            value = int(edt, 16)
+            if value == 0xFFFFFFFE:  # オーバーフロー
+                return None
+            return value * unit
+        return None
+
+    def get_cumulative_energy_reverse(self) -> Optional[float]:
+        """
+        積算電力量（逆方向・売電）を取得
+
+        Returns:
+            積算電力量（kWh）。取得失敗時はNone
+        """
+        unit = self._get_energy_unit()
+        if unit is None:
+            unit = 0.1  # デフォルト
+
+        edt = self._send_echonet(self.EPC_CUMULATIVE_ENERGY_REV)
+        if edt and len(edt) == 8:
+            # 符号なし32ビット整数
+            value = int(edt, 16)
+            if value == 0xFFFFFFFE:  # オーバーフロー
+                return None
+            return value * unit
+        return None
+
+    def get_fixed_cumulative_energy(self) -> Optional[dict]:
+        """
+        定時積算電力量（正方向）を取得
+        30分ごとの積算値と計測日時
+
+        Returns:
+            {
+                "timestamp": "YYYY-MM-DD HH:MM:SS",
+                "energy": 積算電力量(kWh)
+            }
+            取得失敗時はNone
+        """
+        unit = self._get_energy_unit()
+        if unit is None:
+            unit = 0.1  # デフォルト
+
+        edt = self._send_echonet(self.EPC_CUMULATIVE_ENERGY_FIXED)
+        if edt and len(edt) == 22:  # 11バイト
+            # 年(2バイト) + 月(1) + 日(1) + 時(1) + 分(1) + 秒(1) + 積算電力量(4バイト)
+            year = int(edt[0:4], 16)
+            month = int(edt[4:6], 16)
+            day = int(edt[6:8], 16)
+            hour = int(edt[8:10], 16)
+            minute = int(edt[10:12], 16)
+            second = int(edt[12:14], 16)
+            energy_raw = int(edt[14:22], 16)
+
+            if energy_raw == 0xFFFFFFFE:  # オーバーフロー
+                return None
+
+            return {
+                "timestamp": f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}",
+                "energy": energy_raw * unit
+            }
+        return None
+
     def get_power_data(self) -> dict:
         """
         電力データを取得
@@ -440,6 +550,48 @@ class WiSUNClient:
         if current is not None:
             data["instant_current_r"] = current[0]
             data["instant_current_t"] = current[1]
+
+        return data
+
+    def get_energy_data(self) -> dict:
+        """
+        積算電力量データを取得
+
+        Returns:
+            {
+                "cumulative_energy": 積算電力量(kWh),
+                "cumulative_energy_reverse": 逆方向積算電力量(kWh),
+                "fixed_energy": {
+                    "timestamp": "YYYY-MM-DD HH:MM:SS",
+                    "energy": 定時積算電力量(kWh)
+                },
+                "energy_unit": 積算電力量単位(kWh)
+            }
+        """
+        data = {
+            "cumulative_energy": None,
+            "cumulative_energy_reverse": None,
+            "fixed_energy": None,
+            "energy_unit": None
+        }
+
+        # 積算電力量（正方向）
+        energy = self.get_cumulative_energy()
+        if energy is not None:
+            data["cumulative_energy"] = energy
+
+        # 積算電力量（逆方向）
+        energy_rev = self.get_cumulative_energy_reverse()
+        if energy_rev is not None:
+            data["cumulative_energy_reverse"] = energy_rev
+
+        # 定時積算電力量
+        fixed = self.get_fixed_cumulative_energy()
+        if fixed is not None:
+            data["fixed_energy"] = fixed
+
+        # 単位
+        data["energy_unit"] = self.energy_unit
 
         return data
 

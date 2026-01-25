@@ -119,3 +119,30 @@ class MockWiSUNClient:
             "rssi": rssi,
             "rssi_quality": rssi_quality,
         }
+
+    def get_energy_data(self) -> dict:
+        """
+        Mock積算電力量データを返す
+        """
+        now = datetime.now()
+
+        # 定時積算電力量の時刻（30分単位に丸める）
+        fixed_minute = (now.minute // 30) * 30
+        fixed_time = now.replace(minute=fixed_minute, second=0, microsecond=0)
+
+        # 月初からの日数に基づいてベースの積算量を計算（1日約20kWh想定）
+        day_of_month = now.day
+        base_energy = day_of_month * 20.0 + random.uniform(0, 5)
+
+        # 逆方向（売電）は太陽光がある想定で少なめ（1日約5kWh）
+        base_energy_rev = day_of_month * 5.0 + random.uniform(0, 2)
+
+        return {
+            "cumulative_energy": round(base_energy, 1),
+            "cumulative_energy_reverse": round(base_energy_rev, 1),
+            "fixed_energy": {
+                "timestamp": fixed_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "energy": round(base_energy - random.uniform(0, 1), 1)
+            },
+            "energy_unit": 0.1
+        }

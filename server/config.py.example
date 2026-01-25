@@ -11,7 +11,8 @@ API_HOST = "0.0.0.0"
 API_PORT = 8000
 
 # 更新間隔
-POLL_INTERVAL = 3  # 秒
+POLL_INTERVAL = 5  # 瞬時電力の取得間隔（秒）
+ENERGY_POLL_INTERVAL = 1800  # 積算電力量の取得間隔（秒）※スマートメーターが30分更新
 
 # 警告閾値（ダッシュボード表示用）
 POWER_THRESHOLD = 4000  # W
