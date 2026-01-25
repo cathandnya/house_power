@@ -116,13 +116,13 @@
         }
 
         .power-value {
-            font-size: 4rem;
+            font-size: 6rem;
             font-weight: 700;
             line-height: 1;
         }
 
         .power-unit {
-            font-size: 1.5rem;
+            font-size: 2rem;
             font-weight: 400;
             color: #666;
         }
@@ -153,8 +153,8 @@
 
         .threshold-marker {
             position: absolute;
-            top: -4px;
-            height: 16px;
+            top: 0px;
+            height: 8px;
             width: 2px;
             background: #666;
             transform: translateX(-50%);
@@ -165,7 +165,7 @@
             position: absolute;
             top: -22px;
             transform: translateX(-50%);
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             color: #666;
             font-weight: 600;
             white-space: nowrap;
@@ -479,7 +479,7 @@
             }
 
             .threshold-bar {
-                margin-top: 20px;
+                margin-top: 10px;
             }
 
             .threshold-track {
@@ -646,15 +646,15 @@
 <body>
     <div class="container">
         <header>
-            <h1>家庭電力モニター</h1>
+            <h1>電力モニター</h1>
             <div class="status">
+                <span id="statusText">接続中...</span>
                 <div class="status-signal" id="statusSignal">
                     <div class="bar"></div>
                     <div class="bar"></div>
                     <div class="bar"></div>
                     <div class="bar"></div>
                 </div>
-                <span id="statusText">接続中...</span>
                 <span class="mock-badge" id="mockBadge">MOCK</span>
             </div>
         </header>
@@ -934,7 +934,7 @@
             ws.onopen = () => {
                 statusSignal.classList.add('connected');
                 statusSignal.classList.remove('disconnected');
-                statusText.textContent = '接続済';
+                statusText.textContent = '';
                 // 接続時に電波強度も更新
                 loadConnection();
             };
