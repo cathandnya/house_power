@@ -133,6 +133,13 @@
             color: #ef4444;
         }
 
+        .last-update-ago {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #999;
+            margin-top: -16px;
+        }
+
         .threshold-bar {
             margin-top: 24px;
         }
@@ -575,7 +582,8 @@
             .status,
             .timestamp,
             .settings-row label,
-            .settings-row .unit {
+            .settings-row .unit,
+            .last-update-ago {
                 color: #999;
             }
 
@@ -654,6 +662,7 @@
                 </div>
                 <div class="power-unit">W</div>
             </div>
+            <div class="last-update-ago" id="lastUpdateAgo">---</div>
 
             <div class="threshold-bar">
                 <div class="threshold-label">
@@ -769,6 +778,26 @@
         const channelValue = document.getElementById('channelValue');
         const panIdValue = document.getElementById('panIdValue');
         const mockBadge = document.getElementById('mockBadge');
+        const lastUpdateAgo = document.getElementById('lastUpdateAgo');
+
+        // 最終更新時刻を保持
+        let lastUpdateTime = null;
+
+        // 「◯秒前に更新」表示を更新（0.5秒ごと）
+        function updateLastUpdateAgo() {
+            if (lastUpdateTime === null) {
+                lastUpdateAgo.textContent = '---';
+                return;
+            }
+            const seconds = Math.floor((Date.now() - lastUpdateTime) / 1000);
+            if (seconds < 60) {
+                lastUpdateAgo.textContent = `${seconds}秒前に更新`;
+            } else {
+                const minutes = Math.floor(seconds / 60);
+                lastUpdateAgo.textContent = `${minutes}分前に更新`;
+            }
+        }
+        setInterval(updateLastUpdateAgo, 500);
 
         // Chart.js設定（時間軸スケール使用）
         const ctx = document.getElementById('powerChart').getContext('2d');
@@ -888,6 +917,8 @@
             if (data.timestamp) {
                 const date = new Date(data.timestamp);
                 lastUpdate.textContent = date.toLocaleString('ja-JP');
+                lastUpdateTime = Date.now();
+                updateLastUpdateAgo();
             }
 
             // グラフ更新（時刻ベースでプロット）
