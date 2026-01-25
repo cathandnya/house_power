@@ -25,10 +25,10 @@ POWER_THRESHOLD = 4000  # W
 # False: 実際のWi-SUNアダプタを使用（デフォルト）
 MOCK_MODE = False
 
-# === LINE Notify ===
-# https://notify-bot.line.me/ でトークンを発行
-# 空文字の場合は通知無効
-LINE_NOTIFY_TOKEN = ""
-
 # 通知クールダウン（分）- 連続通知を防止
 NOTIFY_COOLDOWN_MINUTES = 5
+# VAPID鍵（空の場合は初回起動時に自動生成してvapid_keys.jsonに保存）
+# 手動設定する場合は以下に記載
+VAPID_PUBLIC_KEY = ""
+VAPID_PRIVATE_KEY = ""
+VAPID_CLAIMS_EMAIL = "mailto:admin@example.com"

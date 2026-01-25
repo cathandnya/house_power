@@ -28,5 +28,7 @@ config.py
 
 # Cache
 wisun_cache.json
+vapid_keys.json
+push_subscriptions.json
 
 tessera/

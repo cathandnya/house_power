@@ -3,16 +3,37 @@ Wi-SUN接続テストスクリプト
 
 前回取得した接続情報（Channel, Pan ID, IPv6アドレス）を使って
 スキャンをスキップし、直接PANA接続と電力データ取得をテストする
+
+※ wisun_cache.jsonに保存された接続情報を使用します
 """
 
+import json
 import serial
 import time
+from pathlib import Path
 import config
 
-# 前回のスキャン結果（キャッシュ）
-CACHED_CHANNEL = "31"
-CACHED_PAN_ID = "A91B"
-CACHED_IPV6_ADDR = "FE80:0000:0000:0000:C2F9:4500:408A:A91B"
+# キャッシュファイルから接続情報を読み込む
+CACHE_FILE = Path(__file__).parent / "wisun_cache.json"
+
+
+def load_cache():
+    """キャッシュから接続情報を読み込む"""
+    if not CACHE_FILE.exists():
+        print(f"ERROR: Cache file not found: {CACHE_FILE}")
+        print("Run the main server first to scan and cache connection info.")
+        return None
+
+    with open(CACHE_FILE, "r") as f:
+        cache = json.load(f)
+
+    required = ["channel", "pan_id", "ipv6_addr"]
+    for key in required:
+        if key not in cache:
+            print(f"ERROR: Missing '{key}' in cache file")
+            return None
+
+    return cache
 
 
 def send_cmd(ser, cmd, wait_for=None, timeout=10):
@@ -34,7 +55,19 @@ def send_cmd(ser, cmd, wait_for=None, timeout=10):
 
 
 def main():
-    print(f"Opening serial port: {config.SERIAL_PORT}")
+    # キャッシュから接続情報を読み込む
+    cache = load_cache()
+    if cache is None:
+        return
+
+    channel = cache["channel"]
+    pan_id = cache["pan_id"]
+    ipv6_addr = cache["ipv6_addr"]
+
+    print(f"Loaded from cache: channel={channel}, pan_id={pan_id}")
+    print(f"IPv6: {ipv6_addr}")
+
+    print(f"\nOpening serial port: {config.SERIAL_PORT}")
     ser = serial.Serial(config.SERIAL_PORT, config.BAUD_RATE, timeout=2)
     time.sleep(0.5)
 
@@ -45,13 +78,13 @@ def main():
         send_cmd(ser, f'SKSETPWD C {config.BROUTE_PASSWORD}', 'OK')
 
         # チャンネル・PAN ID設定
-        print(f"\n[2] Setting channel={CACHED_CHANNEL}, PAN ID={CACHED_PAN_ID}...")
-        send_cmd(ser, f'SKSREG S2 {CACHED_CHANNEL}', 'OK')
-        send_cmd(ser, f'SKSREG S3 {CACHED_PAN_ID}', 'OK')
+        print(f"\n[2] Setting channel={channel}, PAN ID={pan_id}...")
+        send_cmd(ser, f'SKSREG S2 {channel}', 'OK')
+        send_cmd(ser, f'SKSREG S3 {pan_id}', 'OK')
 
         # PANA接続
-        print(f"\n[3] Connecting to {CACHED_IPV6_ADDR}...")
-        ser.write(f'SKJOIN {CACHED_IPV6_ADDR}\r\n'.encode())
+        print(f"\n[3] Connecting to {ipv6_addr}...")
+        ser.write(f'SKJOIN {ipv6_addr}\r\n'.encode())
 
         connected = False
         start = time.time()
@@ -95,7 +128,7 @@ def main():
             frame = bytes.fromhex('1081000105FF0102880162' + '01' + 'E7' + '00')
 
             # SKSENDTOコマンド
-            cmd = f'SKSENDTO 1 {CACHED_IPV6_ADDR} 0E1A 1 0 {len(frame):04X} '
+            cmd = f'SKSENDTO 1 {ipv6_addr} 0E1A 1 0 {len(frame):04X} '
             ser.write(cmd.encode() + frame)
 
             # 応答待ち
@@ -119,7 +152,7 @@ def main():
 
         # SKSENDTOコマンド
         # ハンドル=1, IPv6, ポート=0E1A, SEC=1, SIDE=0, DATALEN, DATA
-        cmd = f'SKSENDTO 1 {CACHED_IPV6_ADDR} 0E1A 1 0 {len(frame):04X} '
+        cmd = f'SKSENDTO 1 {ipv6_addr} 0E1A 1 0 {len(frame):04X} '
         print(f"  Sending: {cmd}[{len(frame)} bytes binary]")
         ser.write(cmd.encode() + frame)
         # テセラ製モジュール: データの後にCRLFは送信しない

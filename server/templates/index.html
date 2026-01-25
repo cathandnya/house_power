@@ -252,19 +252,6 @@
             color: #666;
         }
 
-        .settings-row .line-status {
-            font-size: 0.75rem;
-            padding: 4px 8px;
-            border-radius: 4px;
-            background: #f3f4f6;
-            color: #666;
-        }
-
-        .settings-row .line-status.configured {
-            background: #dcfce7;
-            color: #166534;
-        }
-
         .save-btn {
             width: 100%;
             padding: 12px;
@@ -289,6 +276,84 @@
 
         .save-btn.saved {
             background: #22c55e;
+        }
+
+        .push-btn {
+            width: 100%;
+            padding: 12px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 8px;
+        }
+
+        .push-btn:hover {
+            background: #4f46e5;
+        }
+
+        .push-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .push-btn.subscribed {
+            background: #22c55e;
+        }
+
+        .push-status {
+            font-size: 0.75rem;
+            color: #666;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
+        .push-status.error {
+            color: #ef4444;
+        }
+
+        .test-push-btn {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            color: #6366f1;
+            border: 1px solid #6366f1;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 16px;
+        }
+
+        .test-push-btn:hover {
+            background: #6366f1;
+            color: white;
+        }
+
+        .test-push-btn:disabled {
+            border-color: #9ca3af;
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .push-status {
+                color: #999;
+            }
+
+            .test-push-btn {
+                color: #818cf8;
+                border-color: #818cf8;
+            }
+
+            .test-push-btn:hover {
+                background: #6366f1;
+                color: white;
+            }
         }
 
         /* 接続状況カード */
@@ -548,16 +613,6 @@
                 color: #e5e5e5;
             }
 
-            .settings-row .line-status {
-                background: #333;
-                color: #999;
-            }
-
-            .settings-row .line-status.configured {
-                background: #1a3d1a;
-                color: #4ade80;
-            }
-
             .signal-bar {
                 background: #404040;
             }
@@ -684,11 +739,15 @@
                 <span class="unit">W</span>
             </div>
             <div class="settings-row">
-                <label>LINE通知</label>
+                <label>通知有効</label>
                 <input type="checkbox" id="alertEnabled" checked>
-                <span class="line-status" id="lineStatus">未設定</span>
             </div>
             <button class="save-btn" id="saveBtn">保存</button>
+
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
+            <button class="push-btn" id="pushBtn">プッシュ通知を有効にする</button>
+            <div class="push-status" id="pushStatus"></div>
+            <button class="test-push-btn" id="testPushBtn" disabled>テスト通知を送信</button>
         </div>
 
         <div class="timestamp">
@@ -698,7 +757,7 @@
 
     <script>
         // 設定
-        let THRESHOLD = 4000; // W（LINE通知用）
+        let THRESHOLD = 4000; // W（通知閾値）
         let CONTRACT_AMPERAGE = 40; // A（使用量バー計算用）
         const WS_RECONNECT_INTERVAL = 3000;
 
@@ -713,7 +772,6 @@
         const statusText = document.getElementById('statusText');
         const thresholdInput = document.getElementById('thresholdInput');
         const alertEnabled = document.getElementById('alertEnabled');
-        const lineStatus = document.getElementById('lineStatus');
         const saveBtn = document.getElementById('saveBtn');
         const signalBars = document.getElementById('signalBars');
         const rssiValue = document.getElementById('rssiValue');
@@ -943,14 +1001,6 @@
                 alertEnabled.checked = settings.alert_enabled;
                 CONTRACT_AMPERAGE = settings.contract_amperage;
                 updateThresholdMarker();
-
-                if (settings.line_notify_configured) {
-                    lineStatus.textContent = '設定済み';
-                    lineStatus.classList.add('configured');
-                } else {
-                    lineStatus.textContent = '未設定';
-                    lineStatus.classList.remove('configured');
-                }
             } catch (e) {
                 console.error('Failed to load settings:', e);
             }
@@ -1081,11 +1131,135 @@
         setInterval(loadConnection, 30000);
 
         // Service Worker登録（PWA）
+        let swRegistration = null;
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js')
-                .then(() => console.log('SW registered'))
+                .then(reg => {
+                    console.log('SW registered');
+                    swRegistration = reg;
+                    initPushNotifications();
+                })
                 .catch(err => console.log('SW registration failed:', err));
         }
+
+        // プッシュ通知関連要素
+        const pushBtn = document.getElementById('pushBtn');
+        const pushStatus = document.getElementById('pushStatus');
+        const testPushBtn = document.getElementById('testPushBtn');
+
+        // プッシュ通知の初期化
+        async function initPushNotifications() {
+            if (!('PushManager' in window)) {
+                pushStatus.textContent = 'このブラウザはプッシュ通知に対応していません';
+                pushStatus.classList.add('error');
+                pushBtn.disabled = true;
+                return;
+            }
+
+            // 現在の購読状態を確認
+            const subscription = await swRegistration.pushManager.getSubscription();
+            updatePushUI(subscription);
+        }
+
+        // プッシュ通知UIの更新
+        function updatePushUI(subscription) {
+            if (subscription) {
+                pushBtn.textContent = 'プッシュ通知を無効にする';
+                pushBtn.classList.add('subscribed');
+                pushStatus.textContent = '通知が有効です';
+                pushStatus.classList.remove('error');
+                testPushBtn.disabled = false;
+            } else {
+                pushBtn.textContent = 'プッシュ通知を有効にする';
+                pushBtn.classList.remove('subscribed');
+                pushStatus.textContent = '';
+                testPushBtn.disabled = true;
+            }
+        }
+
+        // VAPID公開鍵をBase64からUint8Arrayに変換
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/-/g, '+')
+                .replace(/_/g, '/');
+
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        // プッシュ通知の購読/解除
+        pushBtn.addEventListener('click', async () => {
+            pushBtn.disabled = true;
+
+            try {
+                const subscription = await swRegistration.pushManager.getSubscription();
+
+                if (subscription) {
+                    // 購読解除
+                    await subscription.unsubscribe();
+                    await fetch('/api/push/unsubscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ endpoint: subscription.endpoint, keys: {} })
+                    });
+                    updatePushUI(null);
+                } else {
+                    // 購読登録
+                    const response = await fetch('/api/push/vapid-public-key');
+                    const { publicKey } = await response.json();
+
+                    const newSubscription = await swRegistration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(publicKey)
+                    });
+
+                    await fetch('/api/push/subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newSubscription.toJSON())
+                    });
+
+                    updatePushUI(newSubscription);
+                }
+            } catch (e) {
+                console.error('Push subscription error:', e);
+                pushStatus.textContent = 'エラー: ' + e.message;
+                pushStatus.classList.add('error');
+            } finally {
+                pushBtn.disabled = false;
+            }
+        });
+
+        // テスト通知
+        testPushBtn.addEventListener('click', async () => {
+            testPushBtn.disabled = true;
+            testPushBtn.textContent = '送信中...';
+
+            try {
+                const response = await fetch('/api/push/test', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    testPushBtn.textContent = '送信しました';
+                } else {
+                    testPushBtn.textContent = '送信失敗';
+                }
+            } catch (e) {
+                console.error('Test push error:', e);
+                testPushBtn.textContent = 'エラー';
+            }
+
+            setTimeout(() => {
+                testPushBtn.textContent = 'テスト通知を送信';
+                testPushBtn.disabled = false;
+            }, 2000);
+        });
 
         // Mockモード確認
         async function checkMockMode() {

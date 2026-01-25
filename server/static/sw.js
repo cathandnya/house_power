@@ -28,6 +28,55 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
+// プッシュ通知受信
+self.addEventListener('push', event => {
+  if (!event.data) {
+    return;
+  }
+
+  try {
+    const data = event.data.json();
+    const options = {
+      body: data.body || '',
+      icon: data.icon || '/static/icons/icon-192.png',
+      badge: data.badge || '/static/icons/icon-72.png',
+      tag: data.tag || 'power-monitor',
+      requireInteraction: data.requireInteraction || false,
+      data: {
+        url: data.url || '/'
+      }
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title || '電力モニター', options)
+    );
+  } catch (e) {
+    console.error('Push notification error:', e);
+  }
+});
+
+// 通知クリック時
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+
+  const url = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      // 既存のウィンドウがあればフォーカス
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // なければ新規ウィンドウを開く
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
+    })
+  );
+});
+
 // ネットワーク優先、失敗時にキャッシュ
 self.addEventListener('fetch', event => {
   // API/WebSocketはキャッシュしない

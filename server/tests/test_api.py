@@ -49,7 +49,7 @@ def reset_state():
     set_alert_threshold(4000)
     set_alert_enabled(True)
     set_contract_amperage(40)
-    api.notifier = None
+    api.web_push_notifier = None
     yield
 
 
@@ -406,7 +406,6 @@ async def test_get_settings_default(transport):
     data = response.json()
     assert data["alert_threshold"] == 4000
     assert data["alert_enabled"] is True
-    assert data["line_notify_configured"] is False
 
 
 @pytest.mark.asyncio
@@ -451,59 +450,6 @@ async def test_update_settings_both(transport):
     data = response.json()
     assert data["alert_threshold"] == 5000
     assert data["alert_enabled"] is False
-
-
-@pytest.mark.asyncio
-async def test_settings_line_notify_configured(transport):
-    """LINE Notify設定済みの確認"""
-    from notifier import LineNotifier
-    api.notifier = LineNotifier(token="test_token")
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/settings")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["line_notify_configured"] is True
-
-
-# --- Notifier Tests ---
-
-
-def test_notifier_can_notify_initial():
-    """初期状態では通知可能"""
-    from notifier import LineNotifier
-    notifier = LineNotifier(token="test", cooldown_minutes=5)
-    assert notifier.can_notify() is True
-
-
-def test_notifier_cooldown():
-    """クールダウン中は通知不可"""
-    from notifier import LineNotifier
-    from datetime import datetime, timedelta
-
-    notifier = LineNotifier(token="test", cooldown_minutes=5)
-    notifier.last_notified = datetime.now()
-
-    assert notifier.can_notify() is False
-
-
-def test_notifier_cooldown_expired():
-    """クールダウン終了後は通知可能"""
-    from notifier import LineNotifier
-    from datetime import datetime, timedelta
-
-    notifier = LineNotifier(token="test", cooldown_minutes=5)
-    notifier.last_notified = datetime.now() - timedelta(minutes=10)
-
-    assert notifier.can_notify() is True
-
-
-def test_notifier_no_token():
-    """トークンなしでは通知不可"""
-    from notifier import LineNotifier
-    notifier = LineNotifier(token="", cooldown_minutes=5)
-    assert notifier.token == ""
 
 
 # --- Static Files Tests (PWA) ---
@@ -586,3 +532,215 @@ def test_set_contract_amperage():
 
     set_contract_amperage(30)
     assert api._contract_amperage == 30
+
+
+# --- Web Push API Tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_vapid_public_key(transport):
+    """VAPID公開鍵の取得"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/push/vapid-public-key")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "publicKey" in data
+    assert isinstance(data["publicKey"], str)
+    assert len(data["publicKey"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_push_status_without_notifier(transport):
+    """WebPushNotifier未設定時のステータス"""
+    api.web_push_notifier = None
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/push/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["configured"] is False
+    assert data["subscription_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_push_status_with_notifier(transport):
+    """WebPushNotifier設定済みのステータス"""
+    from web_push_notifier import WebPushNotifier
+
+    # テスト用のモックnotifierを作成
+    api.web_push_notifier = WebPushNotifier(
+        vapid_public_key="test_public_key",
+        vapid_private_key="test_private_key",
+        subscriptions_file="/tmp/test_push_subs.json",
+    )
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/push/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["configured"] is True
+    assert data["subscription_count"] == 0
+
+    # クリーンアップ
+    api.web_push_notifier = None
+
+
+@pytest.mark.asyncio
+async def test_push_subscribe_without_notifier(transport):
+    """WebPushNotifier未設定時の購読登録"""
+    api.web_push_notifier = None
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/push/subscribe",
+            json={"endpoint": "https://example.com/push", "keys": {"p256dh": "test", "auth": "test"}}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_push_test_without_notifier(transport):
+    """WebPushNotifier未設定時のテスト送信"""
+    api.web_push_notifier = None
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/push/test")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_settings_includes_web_push_info(transport):
+    """設定APIにWeb Push情報が含まれる"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "web_push_configured" in data
+    assert "web_push_subscription_count" in data
+
+
+# --- WebPushNotifier Tests ---
+
+
+def test_web_push_notifier_add_subscription():
+    """購読の追加"""
+    from web_push_notifier import WebPushNotifier
+    import os
+
+    test_file = "/tmp/test_push_subs_add.json"
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+    notifier = WebPushNotifier(
+        vapid_public_key="test_public_key",
+        vapid_private_key="test_private_key",
+        subscriptions_file=test_file,
+    )
+
+    result = notifier.add_subscription({
+        "endpoint": "https://example.com/push/1",
+        "keys": {"p256dh": "test", "auth": "test"}
+    })
+
+    assert result is True
+    assert notifier.get_subscription_count() == 1
+
+    # クリーンアップ
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+
+def test_web_push_notifier_remove_subscription():
+    """購読の削除"""
+    from web_push_notifier import WebPushNotifier
+    import os
+
+    test_file = "/tmp/test_push_subs_remove.json"
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+    notifier = WebPushNotifier(
+        vapid_public_key="test_public_key",
+        vapid_private_key="test_private_key",
+        subscriptions_file=test_file,
+    )
+
+    notifier.add_subscription({
+        "endpoint": "https://example.com/push/1",
+        "keys": {"p256dh": "test", "auth": "test"}
+    })
+    assert notifier.get_subscription_count() == 1
+
+    result = notifier.remove_subscription("https://example.com/push/1")
+    assert result is True
+    assert notifier.get_subscription_count() == 0
+
+    # クリーンアップ
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+
+def test_web_push_notifier_no_endpoint():
+    """エンドポイントなしの購読は拒否"""
+    from web_push_notifier import WebPushNotifier
+    import os
+
+    test_file = "/tmp/test_push_subs_no_ep.json"
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+    notifier = WebPushNotifier(
+        vapid_public_key="test_public_key",
+        vapid_private_key="test_private_key",
+        subscriptions_file=test_file,
+    )
+
+    result = notifier.add_subscription({"keys": {"p256dh": "test", "auth": "test"}})
+    assert result is False
+    assert notifier.get_subscription_count() == 0
+
+    # クリーンアップ
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+
+def test_web_push_notifier_update_existing():
+    """既存購読の更新"""
+    from web_push_notifier import WebPushNotifier
+    import os
+
+    test_file = "/tmp/test_push_subs_update.json"
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+    notifier = WebPushNotifier(
+        vapid_public_key="test_public_key",
+        vapid_private_key="test_private_key",
+        subscriptions_file=test_file,
+    )
+
+    notifier.add_subscription({
+        "endpoint": "https://example.com/push/1",
+        "keys": {"p256dh": "old", "auth": "old"}
+    })
+    notifier.add_subscription({
+        "endpoint": "https://example.com/push/1",
+        "keys": {"p256dh": "new", "auth": "new"}
+    })
+
+    # 同じエンドポイントは1つのみ
+    assert notifier.get_subscription_count() == 1
+
+    # クリーンアップ
+    if os.path.exists(test_file):
+        os.remove(test_file)

@@ -68,7 +68,7 @@ except ImportError:
 
 from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, set_contract_amperage
 import api
-from notifier import LineNotifier
+from web_push_notifier import create_web_push_notifier
 
 
 def parse_args():
@@ -197,20 +197,17 @@ async def main():
     contract_amp = getattr(config, "CONTRACT_AMPERAGE", 40)
     set_contract_amperage(contract_amp)
 
-    # LINE Notifier初期化
-    token = getattr(config, "LINE_NOTIFY_TOKEN", "")
-    if token:
-        cooldown = getattr(config, "NOTIFY_COOLDOWN_MINUTES", 5)
-        api.notifier = LineNotifier(token=token, cooldown_minutes=cooldown)
+    # Web Push Notifier初期化
+    api.web_push_notifier = create_web_push_notifier()
 
     logging.info("=" * 50)
     logging.info("家庭電力モニター サーバー")
     if mock_mode:
         logging.info("*** MOCK MODE ***")
-    if token:
-        logging.info("LINE Notify: Enabled")
+    if api.web_push_notifier:
+        logging.info("Web Push: Enabled")
     else:
-        logging.info("LINE Notify: Disabled (no token)")
+        logging.info("Web Push: Disabled")
     logging.info(f"Log file: {log_file}")
     logging.info("=" * 50)
 
