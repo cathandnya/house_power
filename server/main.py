@@ -12,7 +12,6 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import uvicorn
@@ -24,12 +23,19 @@ def setup_logging():
     log_dir = Path(__file__).parent / "logs"
     log_dir.mkdir(exist_ok=True)
 
-    # ログファイル名（日付付き）
-    log_file = log_dir / f"server_{datetime.now().strftime('%Y%m%d')}.log"
+    # ログファイル名（起動時にクリア）
+    log_file = log_dir / "server.log"
+
+    # 起動時にログファイルをクリア
+    if log_file.exists():
+        log_file.unlink()
 
     # ルートロガー設定
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
+
+    # 既存のハンドラをクリア（重複防止）
+    logger.handlers.clear()
 
     # フォーマッター
     formatter = logging.Formatter(
@@ -60,7 +66,7 @@ except ImportError:
     print("BルートID/パスワードを設定してください")
     sys.exit(1)
 
-from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, update_energy_data, set_contract_amperage
+from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, set_contract_amperage
 import api
 from notifier import LineNotifier
 
@@ -125,28 +131,21 @@ async def power_loop():
         try:
             if wisun_client:
                 data = wisun_client.get_power_data()
+                power = data.get("instant_power")
 
-                # データ更新
-                update_power_data(
-                    power=data.get("instant_power"),
-                    current_r=data.get("instant_current_r"),
-                    current_t=data.get("instant_current_t"),
-                )
-
-                # 接続情報更新
+                # 接続情報更新（電力値に関わらず更新）
                 if hasattr(wisun_client, 'get_connection_info'):
                     update_connection_info(wisun_client.get_connection_info())
 
-                # WebSocketで配信
-                await broadcast_power_data()
-
-                # 閾値チェック・通知
-                power = data.get("instant_power")
+                # 電力値が有効な場合のみ更新・配信
                 if power is not None:
+                    update_power_data(
+                        power=power,
+                        current_r=data.get("instant_current_r"),
+                        current_t=data.get("instant_current_t"),
+                    )
+                    await broadcast_power_data()
                     await check_and_notify(power)
-
-                # ログ出力
-                if power is not None:
                     logging.info(f"Power: {power}W")
                 else:
                     logging.warning("Power data is None")
@@ -157,30 +156,31 @@ async def power_loop():
         await asyncio.sleep(config.POLL_INTERVAL)
 
 
-async def energy_loop():
-    """積算電力量取得ループ"""
-    global wisun_client, running
-
-    # 取得間隔（デフォルト1800秒=30分）
-    interval = getattr(config, "ENERGY_POLL_INTERVAL", 1800)
-
-    # 初回は少し待ってから開始
-    await asyncio.sleep(10)
-
-    while running:
-        try:
-            if wisun_client and hasattr(wisun_client, 'get_energy_data'):
-                energy = wisun_client.get_energy_data()
-                update_energy_data(energy)
-
-                # ログ出力
-                if energy.get("cumulative_energy") is not None:
-                    logging.info(f"Energy: {energy['cumulative_energy']:.1f}kWh")
-
-        except Exception as e:
-            logging.error(f"Error in energy loop: {e}", exc_info=True)
-
-        await asyncio.sleep(interval)
+# 積算電力量ループ（無効化：リクエスト削減のため）
+# async def energy_loop():
+#     """積算電力量取得ループ"""
+#     global wisun_client, running
+#
+#     # 取得間隔（デフォルト1800秒=30分）
+#     interval = getattr(config, "ENERGY_POLL_INTERVAL", 1800)
+#
+#     # 初回は少し待ってから開始
+#     await asyncio.sleep(10)
+#
+#     while running:
+#         try:
+#             if wisun_client and hasattr(wisun_client, 'get_energy_data'):
+#                 energy = wisun_client.get_energy_data()
+#                 update_energy_data(energy)
+#
+#                 # ログ出力
+#                 if energy.get("cumulative_energy") is not None:
+#                     logging.info(f"Energy: {energy['cumulative_energy']:.1f}kWh")
+#
+#         except Exception as e:
+#             logging.error(f"Error in energy loop: {e}", exc_info=True)
+#
+#         await asyncio.sleep(interval)
 
 
 async def main():
@@ -242,7 +242,7 @@ async def main():
 
     # 電力取得タスクを開始
     power_task = asyncio.create_task(power_loop())
-    energy_task = asyncio.create_task(energy_loop())
+    # energy_task = asyncio.create_task(energy_loop())  # 無効化
 
     # APIサーバー起動
     server_config = uvicorn.Config(
@@ -257,7 +257,7 @@ async def main():
     finally:
         running = False
         power_task.cancel()
-        energy_task.cancel()
+        # energy_task.cancel()  # 無効化
 
         if wisun_client:
             wisun_client.close()

@@ -62,6 +62,9 @@ class WiSUNClient:
         self.scan_result: Optional[ScanResult] = None
         self.last_rssi: Optional[int] = None  # 最後に受信したRSSI (dBm)
         self.energy_unit: Optional[float] = None  # 積算電力量単位 (kWh)
+        self.consecutive_timeouts: int = 0  # 連続タイムアウト回数
+        self.max_timeouts_before_reconnect: int = 3  # 再接続までの許容回数
+        self._needs_reconnect: bool = False  # 即座に再接続が必要かどうか
 
     def open(self) -> bool:
         """シリアルポートを開く"""
@@ -238,6 +241,51 @@ class WiSUNClient:
         logging.error("Connection timeout")
         return False
 
+    def reconnect(self) -> bool:
+        """
+        再接続を試行
+
+        Returns:
+            再接続成功したらTrue
+        """
+        logging.warning("Attempting reconnection...")
+
+        # まず SKTERM で明示的に切断を試行
+        if self.ser and self.ser.is_open:
+            try:
+                logging.info("Sending SKTERM...")
+                self.ser.write(b"SKTERM\r\n")
+                time.sleep(1)
+                # バッファクリア
+                while self.ser.in_waiting > 0:
+                    self.ser.read(self.ser.in_waiting)
+            except Exception as e:
+                logging.warning(f"SKTERM error: {e}")
+
+        # 再接続（SKJOINのみ、スキャン不要）
+        if self.ipv6_addr:
+            logging.info("Reconnecting (SKJOIN)...")
+            result = self._send_command(f"SKJOIN {self.ipv6_addr}", "EVENT 25", timeout=30)
+
+            for line in result:
+                if "EVENT 25" in line:
+                    logging.info("Reconnected successfully!")
+                    self.consecutive_timeouts = 0
+                    # バッファクリア
+                    time.sleep(0.5)
+                    while self.ser and self.ser.in_waiting > 0:
+                        self.ser.read(self.ser.in_waiting)
+                    return True
+                if "EVENT 24" in line:
+                    logging.error("Reconnection failed (EVENT 24)")
+                    return False
+
+            logging.error("Reconnection timeout")
+            return False
+        else:
+            logging.error("No IPv6 address for reconnection")
+            return False
+
     def _scan(self) -> Optional[ScanResult]:
         """アクティブスキャンでスマートメーターを探す"""
         # スキャン実行（Duration=7で約2分）
@@ -325,6 +373,22 @@ class WiSUNClient:
                 if line:
                     logging.debug(f"_send_echonet: recv line={line[:80]}...")
 
+                # EVENT 29: PANAセッション切断通知
+                if line.startswith("EVENT 29"):
+                    logging.error("PANA session disconnected (EVENT 29)")
+                    return None
+
+                # EVENT 21: 送信結果 (EVENT 21 <IPv6> <SIDE> <RESULT>)
+                # RESULT: 00=成功, 01=失敗, 02=IP再送回数オーバー
+                if line.startswith("EVENT 21"):
+                    parts = line.split(" ")
+                    if len(parts) >= 4:
+                        result_code = parts[-1]  # 最後の要素が結果コード
+                        if result_code != "00":
+                            logging.warning(f"Send failed: EVENT 21 result={result_code}, triggering reconnect")
+                            self._needs_reconnect = True
+                            return None  # 即座に終了して再接続をトリガー
+
                 if line.startswith("ERXUDP"):
                     # ERXUDP応答をパース
                     # SA2=1の場合: ERXUDP SENDER DEST RPORT LPORT SENDERLLA RSSI SECURED SIDE DATALEN DATA
@@ -349,11 +413,14 @@ class WiSUNClient:
                     # ECHONET Liteレスポンスをパース
                     result = self._parse_echonet_response(data, epc)
                     if result is not None:
+                        self.consecutive_timeouts = 0  # 成功したらリセット
                         return result
             else:
                 time.sleep(0.1)
 
         logging.warning(f"_send_echonet: timeout for EPC={epc}")
+        self.consecutive_timeouts += 1
+        logging.info(f"Consecutive timeouts: {self.consecutive_timeouts}/{self.max_timeouts_before_reconnect}")
         return None
 
     def _parse_echonet_response(self, data: str, expected_epc: str) -> Optional[str]:
@@ -557,16 +624,32 @@ class WiSUNClient:
             "instant_current_t": None
         }
 
+        # EVENT 21失敗または連続タイムアウトで再接続を試行
+        if self._needs_reconnect or self.consecutive_timeouts >= self.max_timeouts_before_reconnect:
+            if self._needs_reconnect:
+                logging.warning("Send failure detected (EVENT 21), attempting reconnect...")
+            else:
+                logging.warning(f"Too many consecutive timeouts ({self.consecutive_timeouts}), attempting reconnect...")
+            if self.reconnect():
+                self.consecutive_timeouts = 0
+                self._needs_reconnect = False
+            else:
+                logging.error("Reconnection failed, will retry next time")
+                # 一旦リセットして次回も再接続を試みる
+                self.consecutive_timeouts = 0
+                self._needs_reconnect = False
+                return data
+
         # 瞬時電力
         power = self.get_instant_power()
         if power is not None:
             data["instant_power"] = power
 
-        # 瞬時電流
-        current = self.get_instant_current()
-        if current is not None:
-            data["instant_current_r"] = current[0]
-            data["instant_current_t"] = current[1]
+        # 瞬時電流（無効化：リクエスト削減のため）
+        # current = self.get_instant_current()
+        # if current is not None:
+        #     data["instant_current_r"] = current[0]
+        #     data["instant_current_t"] = current[1]
 
         return data
 
