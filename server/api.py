@@ -33,6 +33,16 @@ current_data: dict = {
     "timestamp": None,
 }
 
+# 接続情報
+connection_info: dict = {
+    "channel": None,
+    "pan_id": None,
+    "mac_addr": None,
+    "ipv6_addr": None,
+    "rssi": None,
+    "rssi_quality": None,
+}
+
 # 履歴データ（過去1時間分、3秒間隔 = 1200件）
 history: deque = deque(maxlen=1200)
 
@@ -146,6 +156,18 @@ async def get_status():
         "connected_clients": len(connected_clients),
         "last_update": current_data.get("timestamp"),
     }
+
+
+@app.get("/api/connection")
+async def get_connection():
+    """接続情報を取得"""
+    return connection_info
+
+
+def update_connection_info(info: dict):
+    """接続情報を更新"""
+    global connection_info
+    connection_info.update(info)
 
 
 # --- 設定API ---

@@ -94,3 +94,28 @@ class MockWiSUNClient:
             "instant_current_r": current_r,
             "instant_current_t": current_t,
         }
+
+    def get_connection_info(self) -> dict:
+        """
+        Mock接続情報を返す
+        """
+        # RSSIはランダムに変動（-50〜-80 dBm）
+        rssi = random.randint(-80, -50)
+
+        if rssi >= -60:
+            rssi_quality = "excellent"
+        elif rssi >= -70:
+            rssi_quality = "good"
+        elif rssi >= -80:
+            rssi_quality = "fair"
+        else:
+            rssi_quality = "poor"
+
+        return {
+            "channel": "33",
+            "pan_id": "MOCK",
+            "mac_addr": "MOCK00000001",
+            "ipv6_addr": "FE80:0000:0000:0000:MOCK:MOCK:MOCK:0001",
+            "rssi": rssi,
+            "rssi_quality": rssi_quality,
+        }

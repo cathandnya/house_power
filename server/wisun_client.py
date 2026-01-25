@@ -7,7 +7,6 @@ SKコマンドでスマートメーターと通信し、ECHONET Liteで電力値
 
 import serial
 import time
-import re
 import json
 import os
 from typing import Optional
@@ -57,6 +56,7 @@ class WiSUNClient:
         self.ser: Optional[serial.Serial] = None
         self.ipv6_addr: Optional[str] = None
         self.scan_result: Optional[ScanResult] = None
+        self.last_rssi: Optional[int] = None  # 最後に受信したRSSI (dBm)
 
     def open(self) -> bool:
         """シリアルポートを開く"""
@@ -169,6 +169,9 @@ class WiSUNClient:
         print("Setting password...")
         self._send_command(f"SKSETPWD C {self.broute_pwd}", "OK")
 
+        # RSSI表示を有効化（SA2=1でERXUDPにRSSIが含まれる）
+        self._send_command("SKSREG SA2 1", "OK")
+
         # キャッシュがあれば使う
         if self._load_cache() and self.scan_result:
             print(f"Using cached connection info: CH={self.scan_result.channel}")
@@ -215,6 +218,10 @@ class WiSUNClient:
         for line in result:
             if "EVENT 25" in line:
                 print("Connected successfully!")
+                # 接続後バッファクリア
+                time.sleep(0.5)
+                while self.ser and self.ser.in_waiting > 0:
+                    self.ser.read(self.ser.in_waiting)
                 return True
             if "EVENT 24" in line:
                 print("Connection failed (EVENT 24)")
@@ -228,8 +235,9 @@ class WiSUNClient:
 
     def _scan(self) -> Optional[ScanResult]:
         """アクティブスキャンでスマートメーターを探す"""
-        # スキャン実行（Duration=6で約1分）
-        lines = self._send_command("SKSCAN 2 FFFFFFFF 6", "EVENT 22", timeout=60)
+        # スキャン実行（Duration=7で約2分）
+        # テセラ製ドングルは最後のパラメータ(0)が必要
+        lines = self._send_command("SKSCAN 2 FFFFFFFF 7 0", "EVENT 22", timeout=120)
 
         # 結果パース
         channel = None
@@ -288,10 +296,10 @@ class WiSUNClient:
         frame_bytes = bytes.fromhex(frame)
 
         # SKSENDTO送信
-        cmd = f"SKSENDTO 1 {self.ipv6_addr} 0E1A 1 {len(frame_bytes):04X} "
-        self.ser.write(cmd.encode())
-        self.ser.write(frame_bytes)
-        self.ser.write(b"\r\n")
+        # 注意: テセラ製Wi-SUNモジュールでは、コマンドとデータを一度に送信
+        # データの後にCRLFを付けない
+        cmd = f"SKSENDTO 1 {self.ipv6_addr} 0E1A 1 0 {len(frame_bytes):04X} "
+        self.ser.write(cmd.encode() + frame_bytes)
 
         # 応答待ち
         start_time = time.time()
@@ -301,11 +309,29 @@ class WiSUNClient:
 
                 if line.startswith("ERXUDP"):
                     # ERXUDP応答をパース
+                    # SA2=1の場合: ERXUDP SENDER DEST RPORT LPORT SENDERLLA RSSI SECURED SIDE DATALEN DATA
+                    # SA2=0の場合: ERXUDP SENDER DEST RPORT LPORT SENDERLLA SECURED SIDE DATALEN DATA
                     parts = line.split(" ")
-                    if len(parts) >= 9:
-                        data = parts[8]
-                        # ECHONET Liteレスポンスをパース
-                        return self._parse_echonet_response(data, epc)
+                    if len(parts) >= 11:
+                        # SA2=1: RSSIあり
+                        rssi_raw = int(parts[6], 16)
+                        self.last_rssi = rssi_raw - 107  # dBmに変換
+                        data = parts[10]
+                        dest = parts[2]
+                    elif len(parts) >= 10:
+                        # SA2=0: RSSIなし
+                        data = parts[9]
+                        dest = parts[2]
+                    else:
+                        continue
+
+                    # ユニキャスト宛のレスポンスのみ処理（マルチキャストFF02:はスキップ）
+                    if dest.startswith("FF02:"):
+                        continue
+                    # ECHONET Liteレスポンスをパース
+                    result = self._parse_echonet_response(data, epc)
+                    if result is not None:
+                        return result
             else:
                 time.sleep(0.1)
 
@@ -416,6 +442,47 @@ class WiSUNClient:
             data["instant_current_t"] = current[1]
 
         return data
+
+    def get_connection_info(self) -> dict:
+        """
+        接続情報を取得
+
+        Returns:
+            {
+                "channel": チャンネル番号,
+                "pan_id": PAN ID,
+                "mac_addr": MACアドレス,
+                "ipv6_addr": IPv6アドレス,
+                "rssi": 電波強度(dBm),
+                "rssi_quality": 電波品質("excellent"/"good"/"fair"/"poor")
+            }
+        """
+        info = {
+            "channel": None,
+            "pan_id": None,
+            "mac_addr": None,
+            "ipv6_addr": self.ipv6_addr,
+            "rssi": self.last_rssi,
+            "rssi_quality": None
+        }
+
+        if self.scan_result:
+            info["channel"] = self.scan_result.channel
+            info["pan_id"] = self.scan_result.pan_id
+            info["mac_addr"] = self.scan_result.addr
+
+        # RSSI品質判定
+        if self.last_rssi is not None:
+            if self.last_rssi >= -60:
+                info["rssi_quality"] = "excellent"
+            elif self.last_rssi >= -70:
+                info["rssi_quality"] = "good"
+            elif self.last_rssi >= -80:
+                info["rssi_quality"] = "fair"
+            else:
+                info["rssi_quality"] = "poor"
+
+        return info
 
 
 # テスト用

@@ -24,7 +24,7 @@ except ImportError:
     print("BルートID/パスワードを設定してください")
     sys.exit(1)
 
-from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify
+from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info
 import api
 from notifier import LineNotifier
 
@@ -96,6 +96,10 @@ async def power_loop():
                     current_r=data.get("instant_current_r"),
                     current_t=data.get("instant_current_t"),
                 )
+
+                # 接続情報更新
+                if hasattr(wisun_client, 'get_connection_info'):
+                    update_connection_info(wisun_client.get_connection_info())
 
                 # WebSocketで配信
                 await broadcast_power_data()

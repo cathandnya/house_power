@@ -27,3 +27,5 @@ config.py
 
 # Cache
 wisun_cache.json
+
+tessera/

@@ -16,8 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from api import (
     app,
     update_power_data,
+    update_connection_info,
     history,
     current_data,
+    connection_info,
     connected_clients,
     set_mock_mode,
     set_alert_threshold,
@@ -36,6 +38,12 @@ def reset_state():
     current_data["instant_current_r"] = None
     current_data["instant_current_t"] = None
     current_data["timestamp"] = None
+    connection_info["channel"] = None
+    connection_info["pan_id"] = None
+    connection_info["mac_addr"] = None
+    connection_info["ipv6_addr"] = None
+    connection_info["rssi"] = None
+    connection_info["rssi_quality"] = None
     history.clear()
     connected_clients.clear()
     set_mock_mode(False)
@@ -175,6 +183,69 @@ async def test_get_status_with_data(transport):
     assert data["last_update"] is not None
 
 
+# --- Connection Info API Tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_connection_initial(transport):
+    """初期状態では接続情報は全てNone"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/connection")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["channel"] is None
+    assert data["pan_id"] is None
+    assert data["mac_addr"] is None
+    assert data["ipv6_addr"] is None
+    assert data["rssi"] is None
+    assert data["rssi_quality"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_connection_after_update(transport):
+    """update_connection_info後は値が取得できる"""
+    update_connection_info({
+        "channel": "31",
+        "pan_id": "A91B",
+        "mac_addr": "C2F94500408AA91B",
+        "ipv6_addr": "FE80:0000:0000:0000:C2F9:4500:408A:A91B",
+        "rssi": -57,
+        "rssi_quality": "excellent",
+    })
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/connection")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["channel"] == "31"
+    assert data["pan_id"] == "A91B"
+    assert data["mac_addr"] == "C2F94500408AA91B"
+    assert data["ipv6_addr"] == "FE80:0000:0000:0000:C2F9:4500:408A:A91B"
+    assert data["rssi"] == -57
+    assert data["rssi_quality"] == "excellent"
+
+
+@pytest.mark.asyncio
+async def test_get_connection_partial_update(transport):
+    """部分的な更新でも動作する"""
+    update_connection_info({
+        "rssi": -65,
+        "rssi_quality": "good",
+    })
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/connection")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["rssi"] == -65
+    assert data["rssi_quality"] == "good"
+    # 更新していないフィールドはNoneのまま
+    assert data["channel"] is None
+
+
 @pytest.mark.asyncio
 async def test_dashboard(transport):
     """ダッシュボードHTMLレスポンス"""
@@ -250,6 +321,60 @@ def test_mock_client_power_variation():
 
     # ランダムノイズがあるので、10回中少なくとも2つは異なる値になるはず
     assert len(unique_powers) > 1
+
+
+def test_mock_client_get_connection_info():
+    """MockWiSUNClientの接続情報取得テスト"""
+    from mock_client import MockWiSUNClient
+
+    client = MockWiSUNClient()
+    client.connect()
+
+    info = client.get_connection_info()
+
+    # 必要なキーが存在する
+    assert "channel" in info
+    assert "pan_id" in info
+    assert "mac_addr" in info
+    assert "ipv6_addr" in info
+    assert "rssi" in info
+    assert "rssi_quality" in info
+
+    # 値が設定されている
+    assert info["channel"] == "33"
+    assert info["pan_id"] == "MOCK"
+    assert info["mac_addr"] == "MOCK00000001"
+    assert info["ipv6_addr"].startswith("FE80:")
+
+    # RSSIは妥当な範囲 (-80 ~ -50)
+    assert isinstance(info["rssi"], int)
+    assert -80 <= info["rssi"] <= -50
+
+    # rssi_qualityは有効な値
+    assert info["rssi_quality"] in ["excellent", "good", "fair", "poor"]
+
+
+def test_mock_client_connection_info_rssi_quality():
+    """RSSIに応じたrssi_qualityの判定テスト"""
+    from mock_client import MockWiSUNClient
+
+    client = MockWiSUNClient()
+    client.connect()
+
+    # 10回取得してrssi_qualityがRSSI値と一致するか確認
+    for _ in range(10):
+        info = client.get_connection_info()
+        rssi = info["rssi"]
+        quality = info["rssi_quality"]
+
+        if rssi >= -60:
+            assert quality == "excellent"
+        elif rssi >= -70:
+            assert quality == "good"
+        elif rssi >= -80:
+            assert quality == "fair"
+        else:
+            assert quality == "poor"
 
 
 # --- Settings API Tests ---
