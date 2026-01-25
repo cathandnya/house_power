@@ -39,47 +39,12 @@ class MockWiSUNClient:
 
     def get_power_data(self) -> dict:
         """
-        リアルな電力データを生成
+        Mockの電力データを生成
 
-        生成パターン:
-        - 時間帯による変動（朝・昼・夕方・深夜）
-        - ランダムなノイズ
-        - たまに発生する高負荷スパイク
+        色変化がわかりやすいよう広い範囲でランダム変動
+        60A契約(6000W)の場合: 緑<2000W, 青<4000W, 黄<6000W, 赤>6000W
         """
-        now = datetime.now()
-        hour = now.hour
-
-        # 時間帯別ベース電力
-        if 6 <= hour < 9:  # 朝（起床・朝食準備）
-            base = 1500
-        elif 9 <= hour < 12:  # 午前（軽い活動）
-            base = 800
-        elif 12 <= hour < 14:  # 昼（昼食準備）
-            base = 1200
-        elif 14 <= hour < 18:  # 午後
-            base = 600
-        elif 18 <= hour < 22:  # 夜（夕食・入浴・エアコンなど）
-            base = 2000
-        elif 22 <= hour < 24:  # 深夜前
-            base = 1000
-        else:  # 深夜（待機電力中心）
-            base = 300
-
-        # 季節変動（簡易: 月による調整）
-        month = now.month
-        if month in [7, 8]:  # 夏（エアコン）
-            base = int(base * 1.3)
-        elif month in [1, 2, 12]:  # 冬（暖房）
-            base = int(base * 1.4)
-
-        # ランダムノイズ（±20%）
-        noise = random.uniform(-0.2, 0.2)
-        power = int(base * (1 + noise))
-
-        # 10%の確率で高負荷スパイク（電子レンジ、ドライヤーなど）
-        if random.random() < 0.1:
-            spike = random.choice([800, 1000, 1200, 1500])  # 追加負荷
-            power += spike
+        power = random.randint(500, 5500)
 
         # 電流計算（単相3線式: R相・T相に分散）
         # 電力 = 電圧(100V) × 電流 として簡易計算

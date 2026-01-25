@@ -52,8 +52,8 @@ energy_data: dict = {
     "timestamp": None,
 }
 
-# 履歴データ（過去1時間分、3秒間隔 = 1200件）
-history: deque = deque(maxlen=1200)
+# 履歴データ
+history: deque = deque(maxlen=100)
 
 # WebSocket接続管理
 connected_clients: list[WebSocket] = []
@@ -64,6 +64,9 @@ _mock_mode: bool = False
 # アラート設定
 _alert_threshold: int = 4000  # デフォルト閾値 (W)
 _alert_enabled: bool = True
+
+# 契約アンペア（使用量バー計算用）
+_contract_amperage: int = 40  # デフォルト40A
 
 # LINE Notifier（main.pyで初期化）
 notifier: Optional[LineNotifier] = None
@@ -85,6 +88,12 @@ def set_alert_enabled(enabled: bool):
     """アラート有効/無効を設定"""
     global _alert_enabled
     _alert_enabled = enabled
+
+
+def set_contract_amperage(amperage: int):
+    """契約アンペアを設定"""
+    global _contract_amperage
+    _contract_amperage = amperage
 
 
 async def check_and_notify(power: int):
@@ -206,6 +215,7 @@ async def get_settings():
     return {
         "alert_threshold": _alert_threshold,
         "alert_enabled": _alert_enabled,
+        "contract_amperage": _contract_amperage,
         "line_notify_configured": notifier is not None and bool(notifier.token),
     }
 

@@ -45,23 +45,56 @@
         .status {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             font-size: 0.875rem;
             color: #666;
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #ccc;
+        .mock-badge {
+            background: #fbbf24;
+            color: #78350f;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: none;
         }
 
-        .status-dot.connected {
+        .mock-badge.visible {
+            display: inline-block;
+        }
+
+        .status-signal {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 1px;
+            height: 14px;
+        }
+
+        .status-signal .bar {
+            width: 3px;
+            background: #ccc;
+            border-radius: 1px;
+        }
+
+        .status-signal .bar:nth-child(1) { height: 4px; }
+        .status-signal .bar:nth-child(2) { height: 7px; }
+        .status-signal .bar:nth-child(3) { height: 10px; }
+        .status-signal .bar:nth-child(4) { height: 14px; }
+
+        .status-signal.connected .bar.active {
             background: #22c55e;
         }
 
-        .status-dot.disconnected {
+        .status-signal.fair .bar.active {
+            background: #f59e0b;
+        }
+
+        .status-signal.poor .bar.active {
+            background: #ef4444;
+        }
+
+        .status-signal.disconnected .bar {
             background: #ef4444;
         }
 
@@ -91,34 +124,8 @@
             color: #666;
         }
 
-        .power-value.warning {
-            color: #f59e0b;
-        }
-
         .power-value.danger {
             color: #ef4444;
-        }
-
-        .current-display {
-            display: flex;
-            justify-content: center;
-            gap: 48px;
-            margin-top: 16px;
-        }
-
-        .current-item {
-            text-align: center;
-        }
-
-        .current-label {
-            font-size: 0.875rem;
-            color: #666;
-            margin-bottom: 4px;
-        }
-
-        .current-value {
-            font-size: 1.25rem;
-            font-weight: 600;
         }
 
         .threshold-bar {
@@ -137,17 +144,46 @@
             height: 8px;
             background: #e5e7eb;
             border-radius: 4px;
-            overflow: hidden;
+            overflow: visible;
+            position: relative;
+        }
+
+        .threshold-marker {
+            position: absolute;
+            top: -4px;
+            height: 16px;
+            width: 2px;
+            background: #666;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        .threshold-marker-label {
+            position: absolute;
+            top: -22px;
+            transform: translateX(-50%);
+            font-size: 0.7rem;
+            color: #666;
+            font-weight: 600;
+            white-space: nowrap;
         }
 
         .threshold-fill {
             height: 100%;
-            background: #3b82f6;
+            background: #22c55e;
             border-radius: 4px;
             transition: width 0.3s ease, background 0.3s ease;
         }
 
-        .threshold-fill.warning {
+        .threshold-fill.low {
+            background: #22c55e;
+        }
+
+        .threshold-fill.medium {
+            background: #3b82f6;
+        }
+
+        .threshold-fill.high {
             background: #f59e0b;
         }
 
@@ -252,6 +288,94 @@
             background: #22c55e;
         }
 
+        /* 接続状況カード */
+        .connection-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .connection-item {
+            text-align: center;
+        }
+
+        .connection-label {
+            font-size: 0.75rem;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .connection-value {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .signal-bars {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 20px;
+            margin-right: 8px;
+        }
+
+        .signal-bar {
+            width: 4px;
+            background: #e5e7eb;
+            border-radius: 1px;
+        }
+
+        .signal-bar.active {
+            background: #22c55e;
+        }
+
+        .signal-bar.active.fair {
+            background: #f59e0b;
+        }
+
+        .signal-bar.active.poor {
+            background: #ef4444;
+        }
+
+        .signal-bar:nth-child(1) { height: 5px; }
+        .signal-bar:nth-child(2) { height: 10px; }
+        .signal-bar:nth-child(3) { height: 15px; }
+        .signal-bar:nth-child(4) { height: 20px; }
+
+        .quality-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .quality-badge.excellent {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .quality-badge.good {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .quality-badge.fair {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .quality-badge.poor {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .rssi-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
         /* スマホ最適化 */
         @media (max-width: 480px) {
             body {
@@ -286,24 +410,17 @@
                 font-size: 1.25rem;
             }
 
-            .current-display {
-                gap: 32px;
-            }
-
-            .current-label {
-                font-size: 0.75rem;
-            }
-
-            .current-value {
-                font-size: 1.1rem;
-            }
-
             .threshold-bar {
                 margin-top: 20px;
             }
 
             .threshold-track {
                 height: 10px;
+            }
+
+            .threshold-marker {
+                height: 18px;
+                top: -4px;
             }
 
             .chart-container {
@@ -346,6 +463,27 @@
                 font-size: 0.75rem;
                 margin-top: 12px;
             }
+
+            .connection-grid {
+                gap: 12px;
+            }
+
+            .connection-label {
+                font-size: 0.7rem;
+            }
+
+            .connection-value {
+                font-size: 0.9rem;
+            }
+
+            .signal-bars {
+                height: 18px;
+            }
+
+            .signal-bar:nth-child(1) { height: 4px; }
+            .signal-bar:nth-child(2) { height: 8px; }
+            .signal-bar:nth-child(3) { height: 12px; }
+            .signal-bar:nth-child(4) { height: 18px; }
         }
 
         /* 小さいスマホ（iPhone SE等） */
@@ -393,6 +531,14 @@
                 background: #404040;
             }
 
+            .threshold-marker {
+                background: #999;
+            }
+
+            .threshold-marker-label {
+                color: #999;
+            }
+
             .settings-row input[type="number"] {
                 background: #333;
                 border-color: #444;
@@ -408,6 +554,34 @@
                 background: #1a3d1a;
                 color: #4ade80;
             }
+
+            .signal-bar {
+                background: #404040;
+            }
+
+            .quality-badge.excellent {
+                background: #1a3d1a;
+                color: #4ade80;
+            }
+
+            .quality-badge.good {
+                background: #1e3a5f;
+                color: #60a5fa;
+            }
+
+            .quality-badge.fair {
+                background: #3d2e0a;
+                color: #fbbf24;
+            }
+
+            .quality-badge.poor {
+                background: #3d1a1a;
+                color: #f87171;
+            }
+
+            .status-signal .bar {
+                background: #404040;
+            }
         }
     </style>
 </head>
@@ -416,8 +590,14 @@
         <header>
             <h1>家庭電力モニター</h1>
             <div class="status">
-                <span class="status-dot" id="statusDot"></span>
+                <div class="status-signal" id="statusSignal">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
                 <span id="statusText">接続中...</span>
+                <span class="mock-badge" id="mockBadge">MOCK</span>
             </div>
         </header>
 
@@ -429,17 +609,6 @@
                 <div class="power-unit">W</div>
             </div>
 
-            <div class="current-display">
-                <div class="current-item">
-                    <div class="current-label">R相電流</div>
-                    <div class="current-value" id="currentR">--- A</div>
-                </div>
-                <div class="current-item">
-                    <div class="current-label">T相電流</div>
-                    <div class="current-value" id="currentT">--- A</div>
-                </div>
-            </div>
-
             <div class="threshold-bar">
                 <div class="threshold-label">
                     <span>使用量</span>
@@ -447,10 +616,9 @@
                 </div>
                 <div class="threshold-track">
                     <div class="threshold-fill" id="thresholdFill" style="width: 0%"></div>
-                </div>
-                <div class="threshold-label" style="margin-top: 4px;">
-                    <span></span>
-                    <span>閾値: <span id="thresholdValue">4000</span> W</span>
+                    <div class="threshold-marker" id="thresholdMarker">
+                        <div class="threshold-marker-label" id="thresholdMarkerLabel">4000W</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -458,7 +626,7 @@
         <div class="card">
             <div class="card-title">
                 <span>📈</span>
-                <span>過去1時間の推移</span>
+                <span>過去の推移</span>
             </div>
             <div class="chart-container">
                 <canvas id="powerChart"></canvas>
@@ -467,8 +635,45 @@
 
         <div class="card">
             <div class="card-title">
+                <span>📶</span>
+                <span>接続状況</span>
+            </div>
+            <div class="connection-grid">
+                <div class="connection-item">
+                    <div class="connection-label">電波強度</div>
+                    <div class="connection-value">
+                        <div class="rssi-display">
+                            <div class="signal-bars" id="signalBars">
+                                <div class="signal-bar"></div>
+                                <div class="signal-bar"></div>
+                                <div class="signal-bar"></div>
+                                <div class="signal-bar"></div>
+                            </div>
+                            <span id="rssiValue">---</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="connection-item">
+                    <div class="connection-label">接続品質</div>
+                    <div class="connection-value">
+                        <span class="quality-badge" id="qualityBadge">---</span>
+                    </div>
+                </div>
+                <div class="connection-item">
+                    <div class="connection-label">チャンネル</div>
+                    <div class="connection-value" id="channelValue">---</div>
+                </div>
+                <div class="connection-item">
+                    <div class="connection-label">PAN ID</div>
+                    <div class="connection-value" id="panIdValue">---</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
                 <span>⚙️</span>
-                <span>通知設定</span>
+                <span>設定</span>
             </div>
             <div class="settings-row">
                 <label>通知閾値</label>
@@ -490,23 +695,29 @@
 
     <script>
         // 設定
-        let THRESHOLD = 4000; // W（サーバーから取得して更新）
+        let THRESHOLD = 4000; // W（LINE通知用）
+        let CONTRACT_AMPERAGE = 40; // A（使用量バー計算用）
         const WS_RECONNECT_INTERVAL = 3000;
 
         // 要素
         const powerValue = document.getElementById('powerValue');
-        const currentR = document.getElementById('currentR');
-        const currentT = document.getElementById('currentT');
         const thresholdPercent = document.getElementById('thresholdPercent');
         const thresholdFill = document.getElementById('thresholdFill');
-        const thresholdValue = document.getElementById('thresholdValue');
+        const thresholdMarker = document.getElementById('thresholdMarker');
+        const thresholdMarkerLabel = document.getElementById('thresholdMarkerLabel');
         const lastUpdate = document.getElementById('lastUpdate');
-        const statusDot = document.getElementById('statusDot');
+        const statusSignal = document.getElementById('statusSignal');
         const statusText = document.getElementById('statusText');
         const thresholdInput = document.getElementById('thresholdInput');
         const alertEnabled = document.getElementById('alertEnabled');
         const lineStatus = document.getElementById('lineStatus');
         const saveBtn = document.getElementById('saveBtn');
+        const signalBars = document.getElementById('signalBars');
+        const rssiValue = document.getElementById('rssiValue');
+        const qualityBadge = document.getElementById('qualityBadge');
+        const channelValue = document.getElementById('channelValue');
+        const panIdValue = document.getElementById('panIdValue');
+        const mockBadge = document.getElementById('mockBadge');
 
         // Chart.js設定
         const ctx = document.getElementById('powerChart').getContext('2d');
@@ -544,6 +755,13 @@
                             maxTicksLimit: 6,
                             font: {
                                 size: 11
+                            },
+                            callback: function(value, index, ticks) {
+                                // 表示するラベルのみHH:MM形式で返す
+                                const label = this.getLabelForValue(value);
+                                if (!label) return '';
+                                // HH:MM:SS形式からHH:MMを抽出
+                                return label.substring(0, 5);
                             }
                         }
                     },
@@ -567,8 +785,16 @@
             }
         });
 
-        // 閾値表示更新
-        thresholdValue.textContent = THRESHOLD.toLocaleString();
+        // 閾値マーカー更新関数
+        function updateThresholdMarker() {
+            const maxPower = CONTRACT_AMPERAGE * 100;
+            const markerPercent = Math.min((THRESHOLD / maxPower) * 100, 100);
+            thresholdMarker.style.left = markerPercent + '%';
+            thresholdMarkerLabel.textContent = THRESHOLD.toLocaleString() + 'W';
+        }
+
+        // 初期閾値表示更新
+        updateThresholdMarker();
 
         // データ更新
         function updateDisplay(data) {
@@ -577,40 +803,34 @@
                 const power = data.instant_power;
                 powerValue.textContent = power.toLocaleString();
 
-                // 警告色
-                powerValue.classList.remove('warning', 'danger');
-                if (power >= THRESHOLD) {
+                // 契約アンペアから最大電力を計算（A × 100V = W）
+                const maxPower = CONTRACT_AMPERAGE * 100;
+
+                // 警告色（契約上限超過時のみ赤）
+                powerValue.classList.remove('danger');
+                if (power >= maxPower) {
                     powerValue.classList.add('danger');
-                } else if (power >= THRESHOLD * 0.8) {
-                    powerValue.classList.add('warning');
                 }
 
-                // 閾値バー
-                const percent = Math.min(100, (power / THRESHOLD) * 100);
+                // 使用量バー（契約アンペアベース）
+                const percent = (power / maxPower) * 100;
                 thresholdPercent.textContent = Math.round(percent) + '%';
-                thresholdFill.style.width = percent + '%';
+                thresholdFill.style.width = Math.min(100, percent) + '%';
 
-                thresholdFill.classList.remove('warning', 'danger');
-                if (percent >= 100) {
+                // 色分け: 閾値を100%として 0-33%緑, 33-66%青, 66-100%黄, 100%超赤
+                const thresholdPercent2 = (power / THRESHOLD) * 100;
+                thresholdFill.classList.remove('low', 'medium', 'high', 'danger');
+                if (thresholdPercent2 >= 100) {
                     thresholdFill.classList.add('danger');
-                } else if (percent >= 80) {
-                    thresholdFill.classList.add('warning');
+                } else if (thresholdPercent2 >= 66) {
+                    thresholdFill.classList.add('high');
+                } else if (thresholdPercent2 >= 33) {
+                    thresholdFill.classList.add('medium');
+                } else {
+                    thresholdFill.classList.add('low');
                 }
             } else {
                 powerValue.innerHTML = '<span class="no-data">---</span>';
-            }
-
-            // 電流値
-            if (data.instant_current_r !== null) {
-                currentR.textContent = data.instant_current_r.toFixed(1) + ' A';
-            } else {
-                currentR.textContent = '--- A';
-            }
-
-            if (data.instant_current_t !== null) {
-                currentT.textContent = data.instant_current_t.toFixed(1) + ' A';
-            } else {
-                currentT.textContent = '--- A';
             }
 
             // タイムスタンプ
@@ -621,16 +841,18 @@
 
             // グラフ更新
             if (data.instant_power !== null && data.timestamp) {
+                // HH:MM:SS形式で保存（表示時にHH:MMに変換）
                 const time = new Date(data.timestamp).toLocaleTimeString('ja-JP', {
                     hour: '2-digit',
-                    minute: '2-digit'
+                    minute: '2-digit',
+                    second: '2-digit'
                 });
 
                 chartData.labels.push(time);
                 chartData.datasets[0].data.push(data.instant_power);
 
-                // 最大1200件（1時間分）保持
-                if (chartData.labels.length > 1200) {
+                // 最大100件（1時間分@5秒間隔）保持
+                if (chartData.labels.length > 100) {
                     chartData.labels.shift();
                     chartData.datasets[0].data.shift();
                 }
@@ -649,9 +871,11 @@
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                statusDot.classList.add('connected');
-                statusDot.classList.remove('disconnected');
+                statusSignal.classList.add('connected');
+                statusSignal.classList.remove('disconnected');
                 statusText.textContent = '接続中';
+                // 接続時に電波強度も更新
+                loadConnection();
             };
 
             ws.onmessage = (event) => {
@@ -664,8 +888,10 @@
             };
 
             ws.onclose = () => {
-                statusDot.classList.remove('connected');
-                statusDot.classList.add('disconnected');
+                statusSignal.classList.remove('connected', 'fair', 'poor');
+                statusSignal.classList.add('disconnected');
+                // 全バーを非アクティブに
+                statusSignal.querySelectorAll('.bar').forEach(bar => bar.classList.remove('active'));
                 statusText.textContent = '再接続中...';
 
                 // 再接続
@@ -678,17 +904,19 @@
             };
         }
 
-        // 履歴データ取得
+        // 履歴データ取得（直近1時間分 = 100件@5秒間隔）
         async function loadHistory() {
             try {
-                const response = await fetch('/api/history');
+                const response = await fetch('/api/history?limit=100');
                 const history = await response.json();
 
                 history.forEach(data => {
                     if (data.instant_power !== null && data.timestamp) {
+                        // HH:MM:SS形式で保存（表示時にHH:MMに変換）
                         const time = new Date(data.timestamp).toLocaleTimeString('ja-JP', {
                             hour: '2-digit',
-                            minute: '2-digit'
+                            minute: '2-digit',
+                            second: '2-digit'
                         });
                         chartData.labels.push(time);
                         chartData.datasets[0].data.push(data.instant_power);
@@ -709,8 +937,9 @@
 
                 THRESHOLD = settings.alert_threshold;
                 thresholdInput.value = settings.alert_threshold;
-                thresholdValue.textContent = settings.alert_threshold.toLocaleString();
                 alertEnabled.checked = settings.alert_enabled;
+                CONTRACT_AMPERAGE = settings.contract_amperage;
+                updateThresholdMarker();
 
                 if (settings.line_notify_configured) {
                     lineStatus.textContent = '設定済み';
@@ -742,7 +971,8 @@
                 if (response.ok) {
                     const settings = await response.json();
                     THRESHOLD = settings.alert_threshold;
-                    thresholdValue.textContent = settings.alert_threshold.toLocaleString();
+                    CONTRACT_AMPERAGE = settings.contract_amperage;
+                    updateThresholdMarker();
 
                     saveBtn.textContent = '保存しました';
                     saveBtn.classList.add('saved');
@@ -768,6 +998,85 @@
         // 保存ボタンイベント
         saveBtn.addEventListener('click', saveSettings);
 
+        // 接続情報更新
+        function updateConnectionDisplay(data) {
+            // RSSI値
+            if (data.rssi !== null && data.rssi !== undefined) {
+                rssiValue.textContent = data.rssi + ' dBm';
+
+                const quality = data.rssi_quality || 'poor';
+
+                // アクティブバー数を決定
+                let activeBars = 0;
+                if (data.rssi >= -60) activeBars = 4;      // excellent
+                else if (data.rssi >= -70) activeBars = 3; // good
+                else if (data.rssi >= -80) activeBars = 2; // fair
+                else activeBars = 1;                        // poor
+
+                // 接続状況カード内のシグナルバー更新
+                const bars = signalBars.querySelectorAll('.signal-bar');
+                bars.forEach((bar, index) => {
+                    bar.classList.remove('active', 'fair', 'poor');
+                    if (index < activeBars) {
+                        bar.classList.add('active');
+                        if (quality === 'fair') bar.classList.add('fair');
+                        if (quality === 'poor') bar.classList.add('poor');
+                    }
+                });
+
+                // ヘッダーのシグナルバーも更新
+                statusSignal.classList.remove('fair', 'poor');
+                if (quality === 'fair') statusSignal.classList.add('fair');
+                if (quality === 'poor') statusSignal.classList.add('poor');
+
+                const headerBars = statusSignal.querySelectorAll('.bar');
+                headerBars.forEach((bar, index) => {
+                    bar.classList.remove('active');
+                    if (index < activeBars) {
+                        bar.classList.add('active');
+                    }
+                });
+            } else {
+                rssiValue.textContent = '---';
+                signalBars.querySelectorAll('.signal-bar').forEach(bar => {
+                    bar.classList.remove('active', 'fair', 'poor');
+                });
+            }
+
+            // 接続品質バッジ
+            if (data.rssi_quality) {
+                const qualityLabels = {
+                    excellent: '優秀',
+                    good: '良好',
+                    fair: '普通',
+                    poor: '弱い'
+                };
+                qualityBadge.textContent = qualityLabels[data.rssi_quality] || data.rssi_quality;
+                qualityBadge.className = 'quality-badge ' + data.rssi_quality;
+            } else {
+                qualityBadge.textContent = '---';
+                qualityBadge.className = 'quality-badge';
+            }
+
+            // チャンネル・PAN ID
+            channelValue.textContent = data.channel || '---';
+            panIdValue.textContent = data.pan_id || '---';
+        }
+
+        // 接続情報取得
+        async function loadConnection() {
+            try {
+                const response = await fetch('/api/connection');
+                const data = await response.json();
+                updateConnectionDisplay(data);
+            } catch (e) {
+                console.error('Failed to load connection:', e);
+            }
+        }
+
+        // 定期的に接続情報を更新（30秒ごと）
+        setInterval(loadConnection, 30000);
+
         // Service Worker登録（PWA）
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js')
@@ -775,9 +1084,24 @@
                 .catch(err => console.log('SW registration failed:', err));
         }
 
+        // Mockモード確認
+        async function checkMockMode() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                if (status.mock_mode) {
+                    mockBadge.classList.add('visible');
+                }
+            } catch (e) {
+                console.error('Failed to check mock mode:', e);
+            }
+        }
+
         // 初期化
+        checkMockMode();
         loadSettings();
         loadHistory();
+        loadConnection();
         connect();
     </script>
 </body>

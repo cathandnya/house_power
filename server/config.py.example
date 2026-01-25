@@ -14,7 +14,10 @@ API_PORT = 8000
 POLL_INTERVAL = 5  # 瞬時電力の取得間隔（秒）
 ENERGY_POLL_INTERVAL = 1800  # 積算電力量の取得間隔（秒）※スマートメーターが30分更新
 
-# 警告閾値（ダッシュボード表示用）
+# 契約アンペア（使用量バー計算用）
+CONTRACT_AMPERAGE = 40  # A（40A契約 = 最大4000W）
+
+# 警告閾値（LINE通知用）
 POWER_THRESHOLD = 4000  # W
 
 # === Mock Mode ===

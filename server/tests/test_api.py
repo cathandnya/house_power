@@ -26,6 +26,7 @@ from api import (
     set_mock_mode,
     set_alert_threshold,
     set_alert_enabled,
+    set_contract_amperage,
     _mock_mode,
     _alert_threshold,
     _alert_enabled,
@@ -56,6 +57,7 @@ def reset_state():
     set_mock_mode(False)
     set_alert_threshold(4000)
     set_alert_enabled(True)
+    set_contract_amperage(40)
     api.notifier = None
     yield
 
@@ -599,3 +601,50 @@ async def test_app_icon(transport):
 
     assert response.status_code == 200
     assert "image/png" in response.headers["content-type"]
+
+
+# --- Contract Amperage Tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_settings_includes_contract_amperage(transport):
+    """設定に契約アンペアが含まれる"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "contract_amperage" in data
+    assert data["contract_amperage"] == 40  # デフォルト値
+
+
+@pytest.mark.asyncio
+async def test_contract_amperage_is_positive(transport):
+    """契約アンペアは正の整数"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data["contract_amperage"], int)
+    assert data["contract_amperage"] > 0
+
+
+@pytest.mark.asyncio
+async def test_contract_amperage_not_null(transport):
+    """契約アンペアはNoneではない"""
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["contract_amperage"] is not None
+
+
+def test_set_contract_amperage():
+    """契約アンペアの設定"""
+    set_contract_amperage(60)
+    assert api._contract_amperage == 60
+
+    set_contract_amperage(30)
+    assert api._contract_amperage == 30

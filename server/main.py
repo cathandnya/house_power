@@ -24,7 +24,7 @@ except ImportError:
     print("BルートID/パスワードを設定してください")
     sys.exit(1)
 
-from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, update_energy_data
+from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, update_energy_data, set_contract_amperage
 import api
 from notifier import LineNotifier
 
@@ -155,6 +155,10 @@ async def main():
 
     # api.pyにmockモードを設定
     set_mock_mode(mock_mode)
+
+    # 契約アンペア初期化
+    contract_amp = getattr(config, "CONTRACT_AMPERAGE", 40)
+    set_contract_amperage(contract_amp)
 
     # LINE Notifier初期化
     token = getattr(config, "LINE_NOTIFY_TOKEN", "")
