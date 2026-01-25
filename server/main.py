@@ -8,12 +8,48 @@ REST API / WebSocket で配信する
 
 import argparse
 import asyncio
+import logging
 import os
 import signal
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import uvicorn
+
+
+def setup_logging():
+    """ロギング設定（コンソール + ファイル）"""
+    # ログディレクトリ
+    log_dir = Path(__file__).parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+
+    # ログファイル名（日付付き）
+    log_file = log_dir / f"server_{datetime.now().strftime('%Y%m%d')}.log"
+
+    # ルートロガー設定
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    # フォーマッター
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    # コンソールハンドラ
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # ファイルハンドラ
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    return logger, log_file
 
 # ローカルモジュール
 try:
@@ -111,10 +147,12 @@ async def power_loop():
 
                 # ログ出力
                 if power is not None:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Power: {power}W")
+                    logging.info(f"Power: {power}W")
+                else:
+                    logging.warning("Power data is None")
 
         except Exception as e:
-            print(f"Error in power loop: {e}")
+            logging.error(f"Error in power loop: {e}", exc_info=True)
 
         await asyncio.sleep(config.POLL_INTERVAL)
 
@@ -137,10 +175,10 @@ async def energy_loop():
 
                 # ログ出力
                 if energy.get("cumulative_energy") is not None:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Energy: {energy['cumulative_energy']:.1f}kWh")
+                    logging.info(f"Energy: {energy['cumulative_energy']:.1f}kWh")
 
         except Exception as e:
-            print(f"Error in energy loop: {e}")
+            logging.error(f"Error in energy loop: {e}", exc_info=True)
 
         await asyncio.sleep(interval)
 
@@ -148,6 +186,9 @@ async def energy_loop():
 async def main():
     """メイン関数"""
     global wisun_client, running
+
+    # ロギング初期化
+    logger, log_file = setup_logging()
 
     # 引数パース
     args = parse_args()
@@ -166,37 +207,38 @@ async def main():
         cooldown = getattr(config, "NOTIFY_COOLDOWN_MINUTES", 5)
         api.notifier = LineNotifier(token=token, cooldown_minutes=cooldown)
 
-    print("=" * 50)
-    print("家庭電力モニター サーバー")
+    logging.info("=" * 50)
+    logging.info("家庭電力モニター サーバー")
     if mock_mode:
-        print("*** MOCK MODE ***")
+        logging.info("*** MOCK MODE ***")
     if token:
-        print("LINE Notify: Enabled")
+        logging.info("LINE Notify: Enabled")
     else:
-        print("LINE Notify: Disabled (no token)")
-    print("=" * 50)
+        logging.info("LINE Notify: Disabled (no token)")
+    logging.info(f"Log file: {log_file}")
+    logging.info("=" * 50)
 
     # クライアント初期化
     if mock_mode:
-        print("\nStarting in mock mode (no Wi-SUN adapter required)...")
+        logging.info("Starting in mock mode (no Wi-SUN adapter required)...")
     else:
-        print(f"\nConnecting to Wi-SUN adapter ({config.SERIAL_PORT})...")
+        logging.info(f"Connecting to Wi-SUN adapter ({config.SERIAL_PORT})...")
 
     wisun_client = create_client(mock_mode)
 
     # スマートメーターに接続
     if not wisun_client.connect():
-        print("\nFailed to connect to smart meter")
+        logging.error("Failed to connect to smart meter")
         if not mock_mode:
-            print("Please check:")
-            print("  1. Wi-SUN adapter is connected")
-            print("  2. B-route ID/password is correct")
-            print("  3. Smart meter is in range")
-            print("\nTip: Use --mock flag to run without hardware")
+            logging.error("Please check:")
+            logging.error("  1. Wi-SUN adapter is connected")
+            logging.error("  2. B-route ID/password is correct")
+            logging.error("  3. Smart meter is in range")
+            logging.error("Tip: Use --mock flag to run without hardware")
         sys.exit(1)
 
-    print(f"\nStarting API server on http://{config.API_HOST}:{config.API_PORT}")
-    print("Press Ctrl+C to stop\n")
+    logging.info(f"Starting API server on http://{config.API_HOST}:{config.API_PORT}")
+    logging.info("Press Ctrl+C to stop")
 
     # 電力取得タスクを開始
     power_task = asyncio.create_task(power_loop())
@@ -226,7 +268,7 @@ async def main():
 def signal_handler(sig, frame):
     """シグナルハンドラ"""
     global running
-    print("\nShutting down...")
+    logging.info("Shutting down...")
     running = False
     sys.exit(0)
 

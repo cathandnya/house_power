@@ -20,6 +20,7 @@ Thumbs.db
 
 # Logs
 *.log
+server/logs/
 firebase-debug.log
 
 # Config (contains secrets)

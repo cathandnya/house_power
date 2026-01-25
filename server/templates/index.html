@@ -806,9 +806,9 @@
                 // 契約アンペアから最大電力を計算（A × 100V = W）
                 const maxPower = CONTRACT_AMPERAGE * 100;
 
-                // 警告色（契約上限超過時のみ赤）
+                // 警告色（閾値超過時に赤）
                 powerValue.classList.remove('danger');
-                if (power >= maxPower) {
+                if (power >= THRESHOLD) {
                     powerValue.classList.add('danger');
                 }
 
@@ -873,7 +873,7 @@
             ws.onopen = () => {
                 statusSignal.classList.add('connected');
                 statusSignal.classList.remove('disconnected');
-                statusText.textContent = '接続中';
+                statusText.textContent = '接続済';
                 // 接続時に電波強度も更新
                 loadConnection();
             };

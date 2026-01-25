@@ -5,6 +5,7 @@ ROHM BP35C2 / テセラ製 Wi-SUN USBアダプタ対応
 SKコマンドでスマートメーターと通信し、ECHONET Liteで電力値を取得
 """
 
+import logging
 import serial
 import time
 import json
@@ -73,7 +74,7 @@ class WiSUNClient:
             time.sleep(0.5)
             return True
         except serial.SerialException as e:
-            print(f"Serial open error: {e}")
+            logging.error(f"Serial open error: {e}")
             return False
 
     def close(self):
@@ -135,7 +136,7 @@ class WiSUNClient:
                 self.ipv6_addr = data.get('ipv6_addr')
                 return True
         except Exception as e:
-            print(f"Cache load error: {e}")
+            logging.warning(f"Cache load error: {e}")
             return False
 
     def _save_cache(self):
@@ -153,7 +154,7 @@ class WiSUNClient:
             with open(self.cache_file, 'w') as f:
                 json.dump(data, f)
         except Exception as e:
-            print(f"Cache save error: {e}")
+            logging.warning(f"Cache save error: {e}")
 
     def connect(self) -> bool:
         """
@@ -166,11 +167,11 @@ class WiSUNClient:
             return False
 
         # BルートID設定
-        print("Setting B-route ID...")
+        logging.info("Setting B-route ID...")
         self._send_command(f"SKSETRBID {self.broute_id}", "OK")
 
         # パスワード設定
-        print("Setting password...")
+        logging.info("Setting password...")
         self._send_command(f"SKSETPWD C {self.broute_pwd}", "OK")
 
         # RSSI表示を有効化（SA2=1でERXUDPにRSSIが含まれる）
@@ -178,7 +179,7 @@ class WiSUNClient:
 
         # キャッシュがあれば使う
         if self._load_cache() and self.scan_result:
-            print(f"Using cached connection info: CH={self.scan_result.channel}")
+            logging.info(f"Using cached connection info: CH={self.scan_result.channel}")
 
             # チャンネル設定
             self._send_command(f"SKSREG S2 {self.scan_result.channel}", "OK")
@@ -191,13 +192,13 @@ class WiSUNClient:
                 self._save_cache()
         else:
             # スキャン実行
-            print("Scanning for smart meter...")
+            logging.info("Scanning for smart meter...")
             self.scan_result = self._scan()
             if not self.scan_result:
-                print("Smart meter not found")
+                logging.error("Smart meter not found")
                 return False
 
-            print(f"Found: CH={self.scan_result.channel}, PAN={self.scan_result.pan_id}")
+            logging.info(f"Found: CH={self.scan_result.channel}, PAN={self.scan_result.pan_id}")
 
             # チャンネル設定
             self._send_command(f"SKSREG S2 {self.scan_result.channel}", "OK")
@@ -211,30 +212,30 @@ class WiSUNClient:
             self._save_cache()
 
         if not self.ipv6_addr:
-            print("Failed to get IPv6 address")
+            logging.error("Failed to get IPv6 address")
             return False
 
         # PANA接続
-        print("Connecting (SKJOIN)...")
+        logging.info("Connecting (SKJOIN)...")
         result = self._send_command(f"SKJOIN {self.ipv6_addr}", "EVENT 25", timeout=30)
 
         # 接続成功確認
         for line in result:
             if "EVENT 25" in line:
-                print("Connected successfully!")
+                logging.info("Connected successfully!")
                 # 接続後バッファクリア
                 time.sleep(0.5)
                 while self.ser and self.ser.in_waiting > 0:
                     self.ser.read(self.ser.in_waiting)
                 return True
             if "EVENT 24" in line:
-                print("Connection failed (EVENT 24)")
+                logging.error("Connection failed (EVENT 24)")
                 # キャッシュ削除
                 if os.path.exists(self.cache_file):
                     os.remove(self.cache_file)
                 return False
 
-        print("Connection timeout")
+        logging.error("Connection timeout")
         return False
 
     def _scan(self) -> Optional[ScanResult]:
@@ -294,6 +295,7 @@ class WiSUNClient:
     def _send_echonet(self, epc: str) -> Optional[str]:
         """ECHONET Lite電文を送信してEDTを取得"""
         if not self.ser or not self.ipv6_addr:
+            logging.debug(f"_send_echonet: ser={self.ser is not None}, ipv6={self.ipv6_addr}")
             return None
 
         frame = self._build_echonet_frame(epc)
@@ -303,13 +305,25 @@ class WiSUNClient:
         # 注意: テセラ製Wi-SUNモジュールでは、コマンドとデータを一度に送信
         # データの後にCRLFを付けない
         cmd = f"SKSENDTO 1 {self.ipv6_addr} 0E1A 1 0 {len(frame_bytes):04X} "
-        self.ser.write(cmd.encode() + frame_bytes)
+        logging.debug(f"_send_echonet: sending cmd for EPC={epc}")
+        try:
+            self.ser.write(cmd.encode() + frame_bytes)
+        except Exception as e:
+            logging.error(f"_send_echonet: write error: {e}")
+            return None
 
         # 応答待ち
         start_time = time.time()
         while time.time() - start_time < 10:
             if self.ser.in_waiting > 0:
-                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                try:
+                    line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                except Exception as e:
+                    logging.error(f"_send_echonet: readline error: {e}")
+                    return None
+
+                if line:
+                    logging.debug(f"_send_echonet: recv line={line[:80]}...")
 
                 if line.startswith("ERXUDP"):
                     # ERXUDP応答をパース
@@ -339,6 +353,7 @@ class WiSUNClient:
             else:
                 time.sleep(0.1)
 
+        logging.warning(f"_send_echonet: timeout for EPC={epc}")
         return None
 
     def _parse_echonet_response(self, data: str, expected_epc: str) -> Optional[str]:
@@ -373,7 +388,7 @@ class WiSUNClient:
                 pos += 4 + pdc * 2
 
         except Exception as e:
-            print(f"Parse error: {e}")
+            logging.warning(f"Parse error: {e}")
 
         return None
 
@@ -384,7 +399,9 @@ class WiSUNClient:
         Returns:
             瞬時電力（W）。取得失敗時はNone
         """
+        logging.debug("get_instant_power: sending request...")
         edt = self._send_echonet(self.EPC_INSTANT_POWER)
+        logging.debug(f"get_instant_power: edt={edt}")
         if edt and len(edt) == 8:
             # 符号付き32ビット整数
             value = int(edt, 16)
