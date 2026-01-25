@@ -170,16 +170,6 @@
             z-index: 10;
         }
 
-        .threshold-marker-label {
-            position: absolute;
-            top: -22px;
-            transform: translateX(-50%);
-            font-size: 0.75rem;
-            color: #666;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
         .threshold-fill {
             height: 100%;
             background: #22c55e;
@@ -599,10 +589,6 @@
                 background: #999;
             }
 
-            .threshold-marker-label {
-                color: #999;
-            }
-
             .settings-row input[type="number"] {
                 background: #333;
                 border-color: #444;
@@ -671,9 +657,7 @@
                 </div>
                 <div class="threshold-track">
                     <div class="threshold-fill" id="thresholdFill" style="width: 0%"></div>
-                    <div class="threshold-marker" id="thresholdMarker">
-                        <div class="threshold-marker-label" id="thresholdMarkerLabel">4000W</div>
-                    </div>
+                    <div class="threshold-marker" id="thresholdMarker"></div>
                 </div>
             </div>
         </div>
@@ -765,7 +749,6 @@
         const thresholdPercent = document.getElementById('thresholdPercent');
         const thresholdFill = document.getElementById('thresholdFill');
         const thresholdMarker = document.getElementById('thresholdMarker');
-        const thresholdMarkerLabel = document.getElementById('thresholdMarkerLabel');
         const lastUpdate = document.getElementById('lastUpdate');
         const statusSignal = document.getElementById('statusSignal');
         const statusText = document.getElementById('statusText');
@@ -870,7 +853,6 @@
             const maxPower = CONTRACT_AMPERAGE * 100;
             const markerPercent = Math.min((THRESHOLD / maxPower) * 100, 100);
             thresholdMarker.style.left = markerPercent + '%';
-            thresholdMarkerLabel.textContent = THRESHOLD.toLocaleString() + 'W';
         }
 
         // 初期閾値表示更新
@@ -897,14 +879,13 @@
                 thresholdPercent.textContent = Math.round(percent) + '%';
                 thresholdFill.style.width = Math.min(100, percent) + '%';
 
-                // 色分け: 閾値を100%として 0-33%緑, 33-66%青, 66-100%黄, 100%超赤
-                const thresholdPercent2 = (power / THRESHOLD) * 100;
+                // 色分け: 契約アンペアの1/4ごと (0-25%緑, 25-50%青, 50-75%黄, 75%超赤)
                 thresholdFill.classList.remove('low', 'medium', 'high', 'danger');
-                if (thresholdPercent2 >= 100) {
+                if (percent >= 75) {
                     thresholdFill.classList.add('danger');
-                } else if (thresholdPercent2 >= 66) {
+                } else if (percent >= 50) {
                     thresholdFill.classList.add('high');
-                } else if (thresholdPercent2 >= 33) {
+                } else if (percent >= 25) {
                     thresholdFill.classList.add('medium');
                 } else {
                     thresholdFill.classList.add('low');
