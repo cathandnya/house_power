@@ -278,80 +278,66 @@
             background: #22c55e;
         }
 
-        .push-btn {
-            width: 100%;
-            padding: 12px;
-            background: #6366f1;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s;
-            margin-bottom: 8px;
-        }
-
-        .push-btn:hover {
-            background: #4f46e5;
-        }
-
-        .push-btn:disabled {
-            background: #9ca3af;
-            cursor: not-allowed;
-        }
-
-        .push-btn.subscribed {
-            background: #22c55e;
-        }
-
-        .push-status {
-            font-size: 0.75rem;
+        .discord-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.875rem;
             color: #666;
-            text-align: center;
             margin-bottom: 12px;
         }
 
-        .push-status.error {
-            color: #ef4444;
+        .discord-status .icon {
+            font-size: 1.2rem;
         }
 
-        .test-push-btn {
+        .discord-status.configured {
+            color: #22c55e;
+        }
+
+        .discord-status.not-configured {
+            color: #9ca3af;
+        }
+
+        .test-notify-btn {
             width: 100%;
             padding: 10px;
             background: transparent;
-            color: #6366f1;
-            border: 1px solid #6366f1;
+            color: #5865F2;
+            border: 1px solid #5865F2;
             border-radius: 8px;
             font-size: 0.875rem;
             cursor: pointer;
             transition: all 0.2s;
-            margin-bottom: 16px;
         }
 
-        .test-push-btn:hover {
-            background: #6366f1;
+        .test-notify-btn:hover {
+            background: #5865F2;
             color: white;
         }
 
-        .test-push-btn:disabled {
+        .test-notify-btn:disabled {
             border-color: #9ca3af;
             color: #9ca3af;
             cursor: not-allowed;
         }
 
         @media (prefers-color-scheme: dark) {
-            .push-status {
+            .discord-status {
                 color: #999;
             }
 
-            .test-push-btn {
-                color: #818cf8;
-                border-color: #818cf8;
+            .discord-status.configured {
+                color: #4ade80;
             }
 
-            .test-push-btn:hover {
-                background: #6366f1;
+            .test-notify-btn {
+                color: #7289DA;
+                border-color: #7289DA;
+            }
+
+            .test-notify-btn:hover {
+                background: #5865F2;
                 color: white;
             }
         }
@@ -745,9 +731,11 @@
             <button class="save-btn" id="saveBtn">保存</button>
 
             <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
-            <button class="push-btn" id="pushBtn">プッシュ通知を有効にする</button>
-            <div class="push-status" id="pushStatus"></div>
-            <button class="test-push-btn" id="testPushBtn" disabled>テスト通知を送信</button>
+            <div class="discord-status" id="discordStatus">
+                <span class="icon">💬</span>
+                <span id="discordStatusText">Discord通知: 確認中...</span>
+            </div>
+            <button class="test-notify-btn" id="testNotifyBtn" disabled>テスト通知を送信</button>
         </div>
 
         <div class="timestamp">
@@ -1131,133 +1119,62 @@
         setInterval(loadConnection, 30000);
 
         // Service Worker登録（PWA）
-        let swRegistration = null;
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js')
-                .then(reg => {
-                    console.log('SW registered');
-                    swRegistration = reg;
-                    initPushNotifications();
-                })
+                .then(reg => console.log('SW registered'))
                 .catch(err => console.log('SW registration failed:', err));
         }
 
-        // プッシュ通知関連要素
-        const pushBtn = document.getElementById('pushBtn');
-        const pushStatus = document.getElementById('pushStatus');
-        const testPushBtn = document.getElementById('testPushBtn');
+        // Discord通知関連要素
+        const discordStatus = document.getElementById('discordStatus');
+        const discordStatusText = document.getElementById('discordStatusText');
+        const testNotifyBtn = document.getElementById('testNotifyBtn');
 
-        // プッシュ通知の初期化
-        async function initPushNotifications() {
-            if (!('PushManager' in window)) {
-                pushStatus.textContent = 'このブラウザはプッシュ通知に対応していません';
-                pushStatus.classList.add('error');
-                pushBtn.disabled = true;
-                return;
-            }
-
-            // 現在の購読状態を確認
-            const subscription = await swRegistration.pushManager.getSubscription();
-            updatePushUI(subscription);
-        }
-
-        // プッシュ通知UIの更新
-        function updatePushUI(subscription) {
-            if (subscription) {
-                pushBtn.textContent = 'プッシュ通知を無効にする';
-                pushBtn.classList.add('subscribed');
-                pushStatus.textContent = '通知が有効です';
-                pushStatus.classList.remove('error');
-                testPushBtn.disabled = false;
-            } else {
-                pushBtn.textContent = 'プッシュ通知を有効にする';
-                pushBtn.classList.remove('subscribed');
-                pushStatus.textContent = '';
-                testPushBtn.disabled = true;
-            }
-        }
-
-        // VAPID公開鍵をBase64からUint8Arrayに変換
-        function urlBase64ToUint8Array(base64String) {
-            const padding = '='.repeat((4 - base64String.length % 4) % 4);
-            const base64 = (base64String + padding)
-                .replace(/-/g, '+')
-                .replace(/_/g, '/');
-
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
-
-            for (let i = 0; i < rawData.length; ++i) {
-                outputArray[i] = rawData.charCodeAt(i);
-            }
-            return outputArray;
-        }
-
-        // プッシュ通知の購読/解除
-        pushBtn.addEventListener('click', async () => {
-            pushBtn.disabled = true;
-
+        // Discord通知ステータスの取得
+        async function loadNotifyStatus() {
             try {
-                const subscription = await swRegistration.pushManager.getSubscription();
+                const response = await fetch('/api/notify/status');
+                const status = await response.json();
 
-                if (subscription) {
-                    // 購読解除
-                    await subscription.unsubscribe();
-                    await fetch('/api/push/unsubscribe', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ endpoint: subscription.endpoint, keys: {} })
-                    });
-                    updatePushUI(null);
+                if (status.discord_configured) {
+                    discordStatus.classList.add('configured');
+                    discordStatus.classList.remove('not-configured');
+                    discordStatusText.textContent = 'Discord通知: 有効';
+                    testNotifyBtn.disabled = false;
                 } else {
-                    // 購読登録
-                    const response = await fetch('/api/push/vapid-public-key');
-                    const { publicKey } = await response.json();
-
-                    const newSubscription = await swRegistration.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: urlBase64ToUint8Array(publicKey)
-                    });
-
-                    await fetch('/api/push/subscribe', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(newSubscription.toJSON())
-                    });
-
-                    updatePushUI(newSubscription);
+                    discordStatus.classList.add('not-configured');
+                    discordStatus.classList.remove('configured');
+                    discordStatusText.textContent = 'Discord通知: 未設定';
+                    testNotifyBtn.disabled = true;
                 }
             } catch (e) {
-                console.error('Push subscription error:', e);
-                pushStatus.textContent = 'エラー: ' + e.message;
-                pushStatus.classList.add('error');
-            } finally {
-                pushBtn.disabled = false;
+                console.error('Failed to load notify status:', e);
+                discordStatusText.textContent = 'Discord通知: エラー';
             }
-        });
+        }
 
         // テスト通知
-        testPushBtn.addEventListener('click', async () => {
-            testPushBtn.disabled = true;
-            testPushBtn.textContent = '送信中...';
+        testNotifyBtn.addEventListener('click', async () => {
+            testNotifyBtn.disabled = true;
+            testNotifyBtn.textContent = '送信中...';
 
             try {
-                const response = await fetch('/api/push/test', { method: 'POST' });
+                const response = await fetch('/api/notify/test', { method: 'POST' });
                 const result = await response.json();
 
                 if (result.success) {
-                    testPushBtn.textContent = '送信しました';
+                    testNotifyBtn.textContent = '送信しました';
                 } else {
-                    testPushBtn.textContent = '送信失敗';
+                    testNotifyBtn.textContent = result.error || '送信失敗';
                 }
             } catch (e) {
-                console.error('Test push error:', e);
-                testPushBtn.textContent = 'エラー';
+                console.error('Test notify error:', e);
+                testNotifyBtn.textContent = 'エラー';
             }
 
             setTimeout(() => {
-                testPushBtn.textContent = 'テスト通知を送信';
-                testPushBtn.disabled = false;
+                testNotifyBtn.textContent = 'テスト通知を送信';
+                loadNotifyStatus(); // ボタン状態を再読み込み
             }, 2000);
         });
 
@@ -1279,6 +1196,7 @@
         loadSettings();
         loadHistory();
         loadConnection();
+        loadNotifyStatus();
         connect();
     </script>
 </body>

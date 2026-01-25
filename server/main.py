@@ -68,7 +68,7 @@ except ImportError:
 
 from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, set_contract_amperage
 import api
-from web_push_notifier import create_web_push_notifier
+from discord_notifier import create_discord_notifier
 
 
 def parse_args():
@@ -197,17 +197,18 @@ async def main():
     contract_amp = getattr(config, "CONTRACT_AMPERAGE", 40)
     set_contract_amperage(contract_amp)
 
-    # Web Push Notifier初期化
-    api.web_push_notifier = create_web_push_notifier()
+    # Discord Notifier初期化
+    cooldown = getattr(config, "NOTIFY_COOLDOWN_MINUTES", 5)
+    api.discord_notifier = create_discord_notifier(cooldown_minutes=cooldown)
 
     logging.info("=" * 50)
     logging.info("家庭電力モニター サーバー")
     if mock_mode:
         logging.info("*** MOCK MODE ***")
-    if api.web_push_notifier:
-        logging.info("Web Push: Enabled")
+    if api.discord_notifier:
+        logging.info("Discord: Enabled")
     else:
-        logging.info("Web Push: Disabled")
+        logging.info("Discord: Disabled (no webhook URL)")
     logging.info(f"Log file: {log_file}")
     logging.info("=" * 50)
 

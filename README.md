@@ -8,7 +8,7 @@ Wi-SUN Bルートでスマートメーターから直接電力消費量を取得
 - **接続品質監視**: RSSI（電波強度）をリアルタイム表示
 - **自動再接続**: 接続断を検知して自動復帰
 - **Webダッシュボード**: ブラウザでリアルタイム表示・グラフ
-- **プッシュ通知**: 電力が閾値を超えたらブラウザにプッシュ通知
+- **Discord通知**: 電力が閾値を超えたらDiscordに通知
 - **REST API**: 外部システムとの連携が容易
 - **WebSocket**: リアルタイムデータ配信
 - **Mockモード**: Wi-SUNアダプタなしで動作テスト可能
@@ -77,8 +77,11 @@ BROUTE_PASSWORD = "XXXXXXXXXXXX"
 # 更新間隔
 POLL_INTERVAL = 5  # 瞬時電力の取得間隔（秒）
 
-# 警告閾値（Web Push通知用）
+# 警告閾値（Discord通知用）
 POWER_THRESHOLD = 4000  # W
+
+# Discord通知（Webhook URL）
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/..."
 ```
 
 ### 4. 実行
@@ -113,46 +116,27 @@ sudo systemctl enable house-power
 sudo systemctl start house-power
 ```
 
-## プッシュ通知
+## Discord通知
 
-電力が閾値を超えたときにブラウザへプッシュ通知を送信します。
+電力が閾値を超えたときにDiscordへ通知を送信します。
 
 ### 設定方法
 
-1. ダッシュボードにアクセス
-2. 設定セクションで「プッシュ通知を有効にする」をクリック
-3. ブラウザの通知許可を承認
-4. 「テスト通知を送信」で動作確認
+1. Discordでサーバーを作成（または既存サーバーを使用）
+2. チャンネル設定 → 連携サービス → ウェブフック → 新しいウェブフック
+3. 「ウェブフックURLをコピー」をクリック
+4. `config.py` の `DISCORD_WEBHOOK_URL` にURLを設定
+5. ダッシュボードの「テスト通知を送信」で動作確認
 
-### HTTPS対応（スマホからのアクセス）
+### 通知内容
 
-プッシュ通知にはHTTPSが必要です。ローカルネットワークからスマホでアクセスする場合は、Cloudflare Tunnelの使用を推奨します。
-
-```bash
-# cloudflaredインストール
-brew install cloudflared  # macOS
-# または
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 -o cloudflared
-chmod +x cloudflared
-
-# クイックトンネル（テスト用）
-cloudflared tunnel --url http://localhost:8000
-# → https://xxxx.trycloudflare.com が発行される
-
-# 固定ドメイン（本番用）
-cloudflared tunnel login
-cloudflared tunnel create house-power
-cloudflared tunnel route dns house-power power.example.com
-cloudflared tunnel run house-power
+```
+⚡ 電力アラート
+現在: 4,500W
+閾値: 4,000W
 ```
 
-サーバー側の変更は不要です（HTTPのまま起動でOK）。
-
-### iOS対応の注意点
-
-- iOS 16.4以降でWebプッシュ対応
-- **ホーム画面に追加**が必須（Safari単体では不可）
-- HTTPS必須（Cloudflare Tunnelで対応）
+クールダウン機能付きで、連続通知を防止します（デフォルト5分間隔）。
 
 ## 開発・テスト
 
@@ -184,7 +168,7 @@ house_power/
 │   ├── wisun_client.py      # Wi-SUN/ECHONET Lite通信
 │   ├── mock_client.py       # Mockクライアント（テスト用）
 │   ├── api.py               # REST API / WebSocket
-│   ├── web_push_notifier.py # Web Push通知
+│   ├── discord_notifier.py  # Discord通知
 │   ├── static/              # PWA用静的ファイル
 │   │   ├── manifest.json
 │   │   ├── sw.js
@@ -213,11 +197,8 @@ house_power/
 | `/api/history` | GET | 過去の履歴 |
 | `/api/status` | GET | サーバーステータス |
 | `/api/settings` | GET/POST | 通知設定の取得・更新 |
-| `/api/push/vapid-public-key` | GET | VAPID公開鍵 |
-| `/api/push/subscribe` | POST | プッシュ通知購読 |
-| `/api/push/unsubscribe` | POST | プッシュ通知解除 |
-| `/api/push/test` | POST | テスト通知送信 |
-| `/api/push/status` | GET | プッシュ通知ステータス |
+| `/api/notify/test` | POST | テスト通知送信 |
+| `/api/notify/status` | GET | 通知ステータス |
 
 ### WebSocket
 
@@ -293,11 +274,11 @@ ss -tlnp | grep 8000
 sudo ufw status
 ```
 
-### プッシュ通知が届かない
+### Discord通知が届かない
 
-- HTTPSでアクセスしているか確認
-- ブラウザの通知許可設定を確認
-- iOSの場合、ホーム画面に追加しているか確認
+- Webhook URLが正しいか確認
+- Discordサーバー/チャンネルが存在するか確認
+- サーバーログでエラーを確認
 
 ## ライセンス
 

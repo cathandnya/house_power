@@ -15,7 +15,7 @@ from typing import Optional
 import asyncio
 import json
 
-from web_push_notifier import WebPushNotifier, get_or_create_vapid_keys, create_web_push_notifier
+from discord_notifier import DiscordNotifier
 
 # アプリケーション
 app = FastAPI(title="House Power Monitor API")
@@ -57,8 +57,8 @@ _alert_enabled: bool = True
 # 契約アンペア（使用量バー計算用）
 _contract_amperage: int = 40  # デフォルト40A
 
-# Web Push Notifier（main.pyで初期化）
-web_push_notifier: Optional[WebPushNotifier] = None
+# Discord Notifier（main.pyで初期化）
+discord_notifier: Optional[DiscordNotifier] = None
 
 
 def set_mock_mode(mock: bool):
@@ -86,21 +86,20 @@ def set_contract_amperage(amperage: int):
 
 
 async def check_and_notify(power: int):
-    """閾値チェックしてWebPush通知"""
+    """閾値チェックしてDiscord通知"""
     if not _alert_enabled:
         return
     if power < _alert_threshold:
         return
 
     message = (
-        f"電力使用量アラート\n"
-        f"現在: {power:,}W\n"
+        f"現在: **{power:,}W**\n"
         f"閾値: {_alert_threshold:,}W"
     )
 
-    # WebPush通知
-    if web_push_notifier is not None:
-        await web_push_notifier.send(message, title="⚡ 電力アラート")
+    # Discord通知
+    if discord_notifier is not None:
+        await discord_notifier.send(message, title="⚡ 電力アラート")
 
 
 def update_power_data(power: int | None):
@@ -192,8 +191,7 @@ async def get_settings():
         "alert_threshold": _alert_threshold,
         "alert_enabled": _alert_enabled,
         "contract_amperage": _contract_amperage,
-        "web_push_configured": web_push_notifier is not None,
-        "web_push_subscription_count": web_push_notifier.get_subscription_count() if web_push_notifier else 0,
+        "discord_configured": discord_notifier is not None,
     }
 
 
@@ -210,75 +208,28 @@ async def update_settings(settings: SettingsUpdate):
     return await get_settings()
 
 
-# --- Web Push API ---
+# --- Discord通知API ---
 
 
-class PushSubscription(BaseModel):
-    endpoint: str
-    keys: dict
-
-
-@app.get("/api/push/vapid-public-key")
-async def get_vapid_public_key():
-    """VAPID公開鍵を取得"""
-    try:
-        public_key, _ = get_or_create_vapid_keys()
-        return {"publicKey": public_key}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.post("/api/push/subscribe")
-async def subscribe_push(subscription: PushSubscription):
-    """プッシュ通知を購読"""
-    if web_push_notifier is None:
-        return {"error": "Web Push not configured"}
-
-    success = web_push_notifier.add_subscription(subscription.model_dump())
-    return {
-        "success": success,
-        "subscription_count": web_push_notifier.get_subscription_count(),
-    }
-
-
-@app.post("/api/push/unsubscribe")
-async def unsubscribe_push(subscription: PushSubscription):
-    """プッシュ通知の購読を解除"""
-    if web_push_notifier is None:
-        return {"error": "Web Push not configured"}
-
-    success = web_push_notifier.remove_subscription(subscription.endpoint)
-    return {
-        "success": success,
-        "subscription_count": web_push_notifier.get_subscription_count(),
-    }
-
-
-@app.post("/api/push/test")
-async def test_push():
+@app.post("/api/notify/test")
+async def test_notify():
     """テスト通知を送信"""
-    if web_push_notifier is None:
-        return {"error": "Web Push not configured"}
+    if discord_notifier is None:
+        return {"error": "Discord not configured"}
 
-    count = await web_push_notifier.send(
-        "テスト通知です。プッシュ通知が正しく設定されています。",
-        title="テスト通知"
+    success = await discord_notifier.send(
+        "テスト通知です。Discord通知が正しく設定されています。",
+        title="テスト通知",
+        skip_cooldown=True
     )
-    return {"success": count > 0, "sent_count": count}
+    return {"success": success}
 
 
-@app.get("/api/push/status")
-async def get_push_status():
-    """プッシュ通知のステータスを取得"""
-    if web_push_notifier is None:
-        return {
-            "configured": False,
-            "subscription_count": 0,
-        }
-
+@app.get("/api/notify/status")
+async def get_notify_status():
+    """通知のステータスを取得"""
     return {
-        "configured": True,
-        "subscription_count": web_push_notifier.get_subscription_count(),
+        "discord_configured": discord_notifier is not None,
     }
 
 
