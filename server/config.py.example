@@ -17,7 +17,7 @@ ENERGY_POLL_INTERVAL = 1800  # 積算電力量の取得間隔（秒）※スマ�
 # 契約アンペア（使用量バー計算用）
 CONTRACT_AMPERAGE = 40  # A（40A契約 = 最大4000W）
 
-# 警告閾値（LINE通知用）
+# 警告閾値（Discord通知用）
 POWER_THRESHOLD = 4000  # W
 
 # === Mock Mode ===
@@ -25,10 +25,8 @@ POWER_THRESHOLD = 4000  # W
 # False: 実際のWi-SUNアダプタを使用（デフォルト）
 MOCK_MODE = False
 
+# === Discord通知 ===
+# Discord Webhook URL（空の場合は通知無効）
+DISCORD_WEBHOOK_URL = ""
 # 通知クールダウン（分）- 連続通知を防止
 NOTIFY_COOLDOWN_MINUTES = 5
-# VAPID鍵（空の場合は初回起動時に自動生成してvapid_keys.jsonに保存）
-# 手動設定する場合は以下に記載
-VAPID_PUBLIC_KEY = ""
-VAPID_PRIVATE_KEY = ""
-VAPID_CLAIMS_EMAIL = "mailto:admin@example.com"

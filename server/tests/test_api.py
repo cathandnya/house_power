@@ -49,7 +49,7 @@ def reset_state():
     set_alert_threshold(4000)
     set_alert_enabled(True)
     set_contract_amperage(40)
-    api.web_push_notifier = None
+    api.discord_notifier = None
     yield
 
 
@@ -534,70 +534,29 @@ def test_set_contract_amperage():
     assert api._contract_amperage == 30
 
 
-# --- Web Push API Tests ---
+# --- Discord Notify API Tests ---
 
 
 @pytest.mark.asyncio
-async def test_get_vapid_public_key(transport):
-    """VAPID公開鍵の取得"""
+async def test_get_notify_status_without_notifier(transport):
+    """DiscordNotifier未設定時のステータス"""
+    api.discord_notifier = None
+
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/push/vapid-public-key")
+        response = await client.get("/api/notify/status")
 
     assert response.status_code == 200
     data = response.json()
-    assert "publicKey" in data
-    assert isinstance(data["publicKey"], str)
-    assert len(data["publicKey"]) > 0
+    assert data["discord_configured"] is False
 
 
 @pytest.mark.asyncio
-async def test_get_push_status_without_notifier(transport):
-    """WebPushNotifier未設定時のステータス"""
-    api.web_push_notifier = None
+async def test_notify_test_without_notifier(transport):
+    """DiscordNotifier未設定時のテスト送信"""
+    api.discord_notifier = None
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/push/status")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["configured"] is False
-    assert data["subscription_count"] == 0
-
-
-@pytest.mark.asyncio
-async def test_get_push_status_with_notifier(transport):
-    """WebPushNotifier設定済みのステータス"""
-    from web_push_notifier import WebPushNotifier
-
-    # テスト用のモックnotifierを作成
-    api.web_push_notifier = WebPushNotifier(
-        vapid_public_key="test_public_key",
-        vapid_private_key="test_private_key",
-        subscriptions_file="/tmp/test_push_subs.json",
-    )
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/push/status")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["configured"] is True
-    assert data["subscription_count"] == 0
-
-    # クリーンアップ
-    api.web_push_notifier = None
-
-
-@pytest.mark.asyncio
-async def test_push_subscribe_without_notifier(transport):
-    """WebPushNotifier未設定時の購読登録"""
-    api.web_push_notifier = None
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/api/push/subscribe",
-            json={"endpoint": "https://example.com/push", "keys": {"p256dh": "test", "auth": "test"}}
-        )
+        response = await client.post("/api/notify/test")
 
     assert response.status_code == 200
     data = response.json()
@@ -605,142 +564,11 @@ async def test_push_subscribe_without_notifier(transport):
 
 
 @pytest.mark.asyncio
-async def test_push_test_without_notifier(transport):
-    """WebPushNotifier未設定時のテスト送信"""
-    api.web_push_notifier = None
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/api/push/test")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "error" in data
-
-
-@pytest.mark.asyncio
-async def test_settings_includes_web_push_info(transport):
-    """設定APIにWeb Push情報が含まれる"""
+async def test_settings_includes_discord_info(transport):
+    """設定APIにDiscord情報が含まれる"""
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/settings")
 
     assert response.status_code == 200
     data = response.json()
-    assert "web_push_configured" in data
-    assert "web_push_subscription_count" in data
-
-
-# --- WebPushNotifier Tests ---
-
-
-def test_web_push_notifier_add_subscription():
-    """購読の追加"""
-    from web_push_notifier import WebPushNotifier
-    import os
-
-    test_file = "/tmp/test_push_subs_add.json"
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-    notifier = WebPushNotifier(
-        vapid_public_key="test_public_key",
-        vapid_private_key="test_private_key",
-        subscriptions_file=test_file,
-    )
-
-    result = notifier.add_subscription({
-        "endpoint": "https://example.com/push/1",
-        "keys": {"p256dh": "test", "auth": "test"}
-    })
-
-    assert result is True
-    assert notifier.get_subscription_count() == 1
-
-    # クリーンアップ
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-
-def test_web_push_notifier_remove_subscription():
-    """購読の削除"""
-    from web_push_notifier import WebPushNotifier
-    import os
-
-    test_file = "/tmp/test_push_subs_remove.json"
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-    notifier = WebPushNotifier(
-        vapid_public_key="test_public_key",
-        vapid_private_key="test_private_key",
-        subscriptions_file=test_file,
-    )
-
-    notifier.add_subscription({
-        "endpoint": "https://example.com/push/1",
-        "keys": {"p256dh": "test", "auth": "test"}
-    })
-    assert notifier.get_subscription_count() == 1
-
-    result = notifier.remove_subscription("https://example.com/push/1")
-    assert result is True
-    assert notifier.get_subscription_count() == 0
-
-    # クリーンアップ
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-
-def test_web_push_notifier_no_endpoint():
-    """エンドポイントなしの購読は拒否"""
-    from web_push_notifier import WebPushNotifier
-    import os
-
-    test_file = "/tmp/test_push_subs_no_ep.json"
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-    notifier = WebPushNotifier(
-        vapid_public_key="test_public_key",
-        vapid_private_key="test_private_key",
-        subscriptions_file=test_file,
-    )
-
-    result = notifier.add_subscription({"keys": {"p256dh": "test", "auth": "test"}})
-    assert result is False
-    assert notifier.get_subscription_count() == 0
-
-    # クリーンアップ
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-
-def test_web_push_notifier_update_existing():
-    """既存購読の更新"""
-    from web_push_notifier import WebPushNotifier
-    import os
-
-    test_file = "/tmp/test_push_subs_update.json"
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-    notifier = WebPushNotifier(
-        vapid_public_key="test_public_key",
-        vapid_private_key="test_private_key",
-        subscriptions_file=test_file,
-    )
-
-    notifier.add_subscription({
-        "endpoint": "https://example.com/push/1",
-        "keys": {"p256dh": "old", "auth": "old"}
-    })
-    notifier.add_subscription({
-        "endpoint": "https://example.com/push/1",
-        "keys": {"p256dh": "new", "auth": "new"}
-    })
-
-    # 同じエンドポイントは1つのみ
-    assert notifier.get_subscription_count() == 1
-
-    # クリーンアップ
-    if os.path.exists(test_file):
-        os.remove(test_file)
+    assert "discord_configured" in data
