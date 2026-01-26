@@ -32,3 +32,4 @@ vapid_keys.json
 push_subscriptions.json
 
 tessera/
+server/settings.json
