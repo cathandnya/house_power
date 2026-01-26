@@ -27,12 +27,11 @@ Wi-SUN Bルートでスマートメーターから直接電力消費量を取得
 
 ### サーバー構成
 
-- Raspberry Pi（Pi Zero 2 W 推奨）
-- Wi-SUNアダプタ（ROHM BP35C2 または テセラ製）
-- microUSB OTG変換ケーブル
-- microSDカード（8GB以上）
+- Raspberry Pi 等
+- Wi-SUNアダプタ（ROHM BP35C2、テセラ・テクノロジー RL7023 等）
 
-※ Wi-SUNアダプタは両方ともUSB接続、SKコマンド互換。コードは共通で動作
+※ [テセラ製RL7023 Stick-D/IPS](https://amzn.to/4raXM0F)で動作確認済み
+※ ROHM BP35C2もSKコマンド互換のため動作する可能性あり（未検証）
 
 ## セットアップ
 
