@@ -820,6 +820,18 @@
                 plugins: {
                     legend: {
                         display: false
+                    },
+                    tooltip: {
+                        enabled: true,
+                        callbacks: {
+                            afterBody: function() {
+                                // ツールチップ表示後、2秒で非表示にする
+                                setTimeout(() => {
+                                    chart.tooltip.setActiveElements([], {x: 0, y: 0});
+                                    chart.update('none');
+                                }, 2000);
+                            }
+                        }
                     }
                 },
                 scales: {
