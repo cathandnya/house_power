@@ -58,6 +58,9 @@ _alert_enabled: bool = True
 # 契約アンペア（使用量バー計算用）
 _contract_amperage: int = 40  # デフォルト40A
 
+# 設定ファイルパス
+_settings_file: Path = Path(__file__).parent / "settings.json"
+
 # Discord Notifier（main.pyで初期化）
 discord_notifier: Optional[DiscordNotifier] = None
 
@@ -70,6 +73,36 @@ def set_mock_mode(mock: bool):
     """mockモードを設定"""
     global _mock_mode
     _mock_mode = mock
+
+
+def _load_settings():
+    """設定ファイルから読み込み"""
+    global _alert_threshold, _alert_enabled
+    if _settings_file.exists():
+        try:
+            with open(_settings_file, "r") as f:
+                data = json.load(f)
+            _alert_threshold = data.get("alert_threshold", _alert_threshold)
+            _alert_enabled = data.get("alert_enabled", _alert_enabled)
+        except (json.JSONDecodeError, IOError):
+            pass
+
+
+def _save_settings():
+    """設定ファイルに保存"""
+    data = {
+        "alert_threshold": _alert_threshold,
+        "alert_enabled": _alert_enabled,
+    }
+    try:
+        with open(_settings_file, "w") as f:
+            json.dump(data, f, indent=2)
+    except IOError:
+        pass
+
+
+# 起動時に設定を読み込み
+_load_settings()
 
 
 def set_alert_threshold(threshold: int):
@@ -222,6 +255,7 @@ async def update_settings(settings: SettingsUpdate):
     if settings.enabled is not None:
         _alert_enabled = settings.enabled
 
+    _save_settings()
     return await get_settings()
 
 
