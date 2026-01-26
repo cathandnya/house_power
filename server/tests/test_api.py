@@ -25,6 +25,7 @@ from api import (
     set_alert_threshold,
     set_alert_enabled,
     set_contract_amperage,
+    set_nature_remo_enabled,
     _mock_mode,
     _alert_threshold,
     _alert_enabled,
@@ -49,7 +50,9 @@ def reset_state():
     set_alert_threshold(4000)
     set_alert_enabled(True)
     set_contract_amperage(40)
+    set_nature_remo_enabled(False)
     api.discord_notifier = None
+    api.nature_remo_controller = None
     yield
 
 

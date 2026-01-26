@@ -66,9 +66,10 @@ except ImportError:
     print("BルートID/パスワードを設定してください")
     sys.exit(1)
 
-from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, set_contract_amperage
+from api import app, update_power_data, broadcast_power_data, set_mock_mode, check_and_notify, update_connection_info, set_contract_amperage, set_nature_remo_enabled
 import api
 from discord_notifier import create_discord_notifier
+from nature_remo_controller import create_nature_remo_controller
 
 
 def parse_args():
@@ -201,6 +202,16 @@ async def main():
     cooldown = getattr(config, "NOTIFY_COOLDOWN_MINUTES", 5)
     api.discord_notifier = create_discord_notifier(cooldown_minutes=cooldown)
 
+    # Nature Remo初期化
+    nature_remo_enabled = getattr(config, "NATURE_REMO_ENABLED", False)
+    set_nature_remo_enabled(nature_remo_enabled)
+    api.nature_remo_controller = create_nature_remo_controller(
+        access_token=getattr(config, "NATURE_REMO_ACCESS_TOKEN", ""),
+        enabled=nature_remo_enabled,
+        cooldown_minutes=getattr(config, "NATURE_REMO_COOLDOWN_MINUTES", 5),
+        actions=getattr(config, "NATURE_REMO_ACTIONS", []),
+    )
+
     logging.info("=" * 50)
     logging.info("家庭電力モニター サーバー")
     if mock_mode:
@@ -209,6 +220,12 @@ async def main():
         logging.info("Discord: Enabled")
     else:
         logging.info("Discord: Disabled (no webhook URL)")
+    if nature_remo_enabled and api.nature_remo_controller:
+        logging.info("Nature Remo: Enabled")
+    elif nature_remo_enabled:
+        logging.info("Nature Remo: Disabled (no access token)")
+    else:
+        logging.info("Nature Remo: Disabled")
     logging.info(f"Log file: {log_file}")
     logging.info("=" * 50)
 
