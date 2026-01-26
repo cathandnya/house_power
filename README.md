@@ -115,6 +115,20 @@ sudo systemctl enable house-power
 sudo systemctl start house-power
 ```
 
+## Pico Scroll Pack クライアント（Pico W）
+
+Raspberry Pi Pico W + Pimoroni Pico Scroll Pack で電力値を表示する MicroPython クライアントです。
+
+### セットアップ
+
+1. Pimoroni MicroPython ファームウェアを書き込み  
+   `https://github.com/pimoroni/pimoroni-pico/releases` の `.uf2` を使用
+2. `pico_scroll_client/` 配下のファイルを Pico W にアップロード
+3. `pico_scroll_client/config.py` を編集して Wi-Fi とサーバー URL を設定
+4. `main.py` を実行
+
+WebSocket のエンドポイントは `ws://<サーバーIP>:8000/ws/power` です。
+
 ## Discord通知
 
 電力が閾値を超えたときにDiscordへ通知を送信します。
@@ -180,6 +194,12 @@ house_power/
 ├── .github/
 │   └── workflows/
 │       └── test.yml         # GitHub Actions CI
+├── pico_scroll_client/      # Pico Scroll Pack クライアント
+│   ├── main.py              # メインスクリプト
+│   ├── config.py            # Wi-Fi / サーバー設定
+│   ├── font.py              # 3x5 数字フォント
+│   ├── display.py           # 表示ヘルパー
+│   └── uwebsockets/         # WebSocket クライアント
 ├── .gitignore
 └── README.md
 ```
