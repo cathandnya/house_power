@@ -16,6 +16,7 @@ import asyncio
 import json
 
 from discord_notifier import DiscordNotifier
+from nature_remo_controller import NatureRemoController
 
 # アプリケーション
 app = FastAPI(title="House Power Monitor API")
@@ -60,6 +61,10 @@ _contract_amperage: int = 40  # デフォルト40A
 # Discord Notifier（main.pyで初期化）
 discord_notifier: Optional[DiscordNotifier] = None
 
+# Nature Remo（main.pyで初期化）
+_nature_remo_enabled: bool = False
+nature_remo_controller: Optional[NatureRemoController] = None
+
 
 def set_mock_mode(mock: bool):
     """mockモードを設定"""
@@ -85,6 +90,12 @@ def set_contract_amperage(amperage: int):
     _contract_amperage = amperage
 
 
+def set_nature_remo_enabled(enabled: bool):
+    """Nature Remo有効/無効を設定"""
+    global _nature_remo_enabled
+    _nature_remo_enabled = enabled
+
+
 async def check_and_notify(power: int):
     """閾値チェックしてDiscord通知"""
     if not _alert_enabled:
@@ -100,6 +111,10 @@ async def check_and_notify(power: int):
     # Discord通知
     if discord_notifier is not None:
         await discord_notifier.send(message, title="⚡ 電力アラート")
+
+    # Nature Remo制御
+    if _nature_remo_enabled and nature_remo_controller is not None:
+        await nature_remo_controller.execute_actions()
 
 
 def update_power_data(power: int | None):
@@ -192,6 +207,8 @@ async def get_settings():
         "alert_enabled": _alert_enabled,
         "contract_amperage": _contract_amperage,
         "discord_configured": discord_notifier is not None,
+        "nature_remo_enabled": _nature_remo_enabled,
+        "nature_remo_configured": nature_remo_controller is not None,
     }
 
 
@@ -230,7 +247,32 @@ async def get_notify_status():
     """通知のステータスを取得"""
     return {
         "discord_configured": discord_notifier is not None,
+        "nature_remo_enabled": _nature_remo_enabled,
+        "nature_remo_configured": nature_remo_controller is not None,
     }
+
+
+# --- Nature Remo API ---
+
+
+@app.get("/api/nature-remo/appliances")
+async def get_nature_remo_appliances():
+    """Nature Remo 家電一覧を取得"""
+    if nature_remo_controller is None:
+        return {"error": "Nature Remo not configured"}
+
+    appliances = await nature_remo_controller.get_appliances()
+    return appliances
+
+
+@app.post("/api/nature-remo/test")
+async def test_nature_remo():
+    """Nature Remo テスト実行"""
+    if nature_remo_controller is None:
+        return {"error": "Nature Remo not configured"}
+
+    success = await nature_remo_controller.execute_actions(skip_cooldown=True)
+    return {"success": success}
 
 
 # --- WebSocket ---

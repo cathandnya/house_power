@@ -30,3 +30,13 @@ MOCK_MODE = False
 DISCORD_WEBHOOK_URL = ""
 # 通知クールダウン（分）- 連続通知を防止
 NOTIFY_COOLDOWN_MINUTES = 5
+
+# === Nature Remo 連携 ===
+# Nature Remo Cloud API アクセストークン
+NATURE_REMO_ACCESS_TOKEN = ""
+# Nature Remo 連携の有効/無効
+NATURE_REMO_ENABLED = False
+# クールダウン（分）- 連続制御を防止
+NATURE_REMO_COOLDOWN_MINUTES = 5
+# 制御アクション設定
+NATURE_REMO_ACTIONS = []
