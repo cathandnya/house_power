@@ -990,6 +990,19 @@
             };
         }
 
+        // 現在の電力値取得（初回表示用）
+        async function loadPower() {
+            try {
+                const response = await fetch('/api/power');
+                const data = await response.json();
+                if (data.instant_power !== null) {
+                    updateDisplay(data);
+                }
+            } catch (e) {
+                console.error('Failed to load power:', e);
+            }
+        }
+
         // 履歴データ取得（最大100件）
         async function loadHistory() {
             try {
@@ -1275,6 +1288,7 @@
         // 初期化
         checkMockMode();
         loadSettings();
+        loadPower();  // WebSocket接続前にAPIで現在値を取得
         loadHistory();
         loadConnection();
         loadNotifyStatus();
