@@ -730,7 +730,12 @@
                 <span class="icon">💬</span>
                 <span id="discordStatusText">Discord通知: 確認中...</span>
             </div>
-            <button class="test-notify-btn" id="testNotifyBtn" disabled>テスト通知を送信</button>
+            <div class="discord-status" id="natureRemoStatus">
+                <span class="icon">🏠</span>
+                <span id="natureRemoStatusText">Nature Remo: 確認中...</span>
+            </div>
+            <button class="test-notify-btn" id="testNotifyBtn" style="display: none;" disabled>Discord テスト通知</button>
+            <button class="test-notify-btn" id="testNatureRemoBtn" style="display: none; margin-top: 8px;" disabled>Nature Remo テスト実行</button>
         </div>
 
         <div class="timestamp">
@@ -1131,31 +1136,49 @@
                 .catch(err => console.log('SW registration failed:', err));
         }
 
-        // Discord通知関連要素
+        // Discord/Nature Remo通知関連要素
         const discordStatus = document.getElementById('discordStatus');
         const discordStatusText = document.getElementById('discordStatusText');
+        const natureRemoStatus = document.getElementById('natureRemoStatus');
+        const natureRemoStatusText = document.getElementById('natureRemoStatusText');
         const testNotifyBtn = document.getElementById('testNotifyBtn');
+        const testNatureRemoBtn = document.getElementById('testNatureRemoBtn');
 
-        // Discord通知ステータスの取得
+        // 通知ステータスの取得
         async function loadNotifyStatus() {
             try {
                 const response = await fetch('/api/notify/status');
                 const status = await response.json();
 
+                // Discord
                 if (status.discord_configured) {
                     discordStatus.classList.add('configured');
                     discordStatus.classList.remove('not-configured');
                     discordStatusText.textContent = 'Discord通知: 有効';
-                    testNotifyBtn.disabled = false;
                 } else {
                     discordStatus.classList.add('not-configured');
                     discordStatus.classList.remove('configured');
                     discordStatusText.textContent = 'Discord通知: 未設定';
-                    testNotifyBtn.disabled = true;
+                }
+
+                // Nature Remo
+                if (status.nature_remo_configured && status.nature_remo_enabled) {
+                    natureRemoStatus.classList.add('configured');
+                    natureRemoStatus.classList.remove('not-configured');
+                    natureRemoStatusText.textContent = 'Nature Remo: 有効';
+                } else if (status.nature_remo_configured) {
+                    natureRemoStatus.classList.add('not-configured');
+                    natureRemoStatus.classList.remove('configured');
+                    natureRemoStatusText.textContent = 'Nature Remo: 無効';
+                } else {
+                    natureRemoStatus.classList.add('not-configured');
+                    natureRemoStatus.classList.remove('configured');
+                    natureRemoStatusText.textContent = 'Nature Remo: 未設定';
                 }
             } catch (e) {
                 console.error('Failed to load notify status:', e);
                 discordStatusText.textContent = 'Discord通知: エラー';
+                natureRemoStatusText.textContent = 'Nature Remo: エラー';
             }
         }
 
@@ -1184,6 +1207,31 @@
             }, 2000);
         });
 
+        // Nature Remo テスト実行
+        testNatureRemoBtn.addEventListener('click', async () => {
+            testNatureRemoBtn.disabled = true;
+            testNatureRemoBtn.textContent = '実行中...';
+
+            try {
+                const response = await fetch('/api/nature-remo/test', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    testNatureRemoBtn.textContent = '実行しました';
+                } else {
+                    testNatureRemoBtn.textContent = result.error || '実行失敗';
+                }
+            } catch (e) {
+                console.error('Nature Remo test error:', e);
+                testNatureRemoBtn.textContent = 'エラー';
+            }
+
+            setTimeout(() => {
+                testNatureRemoBtn.textContent = 'Nature Remo テスト実行';
+                testNatureRemoBtn.disabled = false;
+            }, 2000);
+        });
+
         // Mockモード確認
         async function checkMockMode() {
             try {
@@ -1191,6 +1239,11 @@
                 const status = await response.json();
                 if (status.mock_mode) {
                     mockBadge.classList.add('visible');
+                    // Mockモードの場合のみテストボタンを表示
+                    testNotifyBtn.style.display = 'block';
+                    testNotifyBtn.disabled = false;
+                    testNatureRemoBtn.style.display = 'block';
+                    testNatureRemoBtn.disabled = false;
                 }
             } catch (e) {
                 console.error('Failed to check mock mode:', e);
