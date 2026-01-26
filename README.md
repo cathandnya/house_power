@@ -9,6 +9,7 @@ Wi-SUN Bルートでスマートメーターから直接電力消費量を取得
 - **自動再接続**: 接続断を検知して自動復帰
 - **Webダッシュボード**: ブラウザでリアルタイム表示・グラフ
 - **Discord通知**: 電力が閾値を超えたらDiscordに通知
+- **Nature Remo連携**: 電力超過時に家電を自動制御（エアコンOFF等）
 - **REST API**: 外部システムとの連携が容易
 - **WebSocket**: リアルタイムデータ配信
 - **Mockモード**: Wi-SUNアダプタなしで動作テスト可能
@@ -137,6 +138,34 @@ sudo systemctl start house-power
 
 クールダウン機能付きで、連続通知を防止します（デフォルト5分間隔）。
 
+## Nature Remo連携
+
+電力が閾値を超えたとき、Nature Remo経由で家電を自動制御できます。
+
+詳細は [docs/nature-remo-setup.md](docs/nature-remo-setup.md) を参照。
+
+### クイックスタート
+
+```bash
+# 家電一覧を取得
+cd server
+python list_appliances.py
+```
+
+表示された設定例を `config.py` にコピーして有効化：
+
+```python
+NATURE_REMO_ACCESS_TOKEN = "your-token"
+NATURE_REMO_ENABLED = True
+NATURE_REMO_ACTIONS = [
+    {
+        "appliance_id": "xxx-xxx-xxx",
+        "endpoint": "aircon_settings",
+        "params": {"button": "power-off"},
+    },
+]
+```
+
 ## 開発・テスト
 
 ### Mockモード
@@ -168,6 +197,8 @@ house_power/
 │   ├── mock_client.py       # Mockクライアント（テスト用）
 │   ├── api.py               # REST API / WebSocket
 │   ├── discord_notifier.py  # Discord通知
+│   ├── nature_remo_controller.py  # Nature Remo連携
+│   ├── list_appliances.py   # 家電一覧取得スクリプト
 │   ├── static/              # PWA用静的ファイル
 │   │   ├── manifest.json
 │   │   ├── sw.js
@@ -198,6 +229,7 @@ house_power/
 | `/api/settings` | GET/POST | 通知設定の取得・更新 |
 | `/api/notify/test` | POST | テスト通知送信 |
 | `/api/notify/status` | GET | 通知ステータス |
+| `/api/nature-remo/test` | POST | Nature Remoテスト実行 |
 
 ### WebSocket
 

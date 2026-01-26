@@ -130,7 +130,7 @@ async def test_api_nature_remo_not_configured(transport):
     set_nature_remo_enabled(False)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/nature-remo/appliances")
+        response = await client.post("/api/nature-remo/test")
 
     assert response.status_code == 200
     assert response.json()["error"] == "Nature Remo not configured"
@@ -139,8 +139,6 @@ async def test_api_nature_remo_not_configured(transport):
 @pytest.mark.asyncio
 async def test_api_nature_remo_test_execute(transport):
     class DummyController:
-        async def get_appliances(self):
-            return [{"id": "appliance-1"}]
 
         async def execute_actions(self, skip_cooldown=False):
             return True

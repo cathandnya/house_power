@@ -26,32 +26,7 @@ python list_appliances.py
 
 家電一覧と、config.py への設定例が表示されます。
 
-### API で確認
-
-サーバー起動後、以下で家電一覧を取得できます。
-
-```bash
-curl http://localhost:8000/api/nature-remo/appliances
-```
-
-レスポンス例：
-
-```json
-[
-  {
-    "id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "nickname": "リビングエアコン",
-    "type": "AC"
-  },
-  {
-    "id": "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy",
-    "nickname": "リビング照明",
-    "type": "LIGHT"
-  }
-]
-```
-
-この `id` を `appliance_id` として使用します。
+表示された `id` を `appliance_id` として使用します。
 
 ## 3. エンドポイントとパラメータ
 

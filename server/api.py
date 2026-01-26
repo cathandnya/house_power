@@ -255,16 +255,6 @@ async def get_notify_status():
 # --- Nature Remo API ---
 
 
-@app.get("/api/nature-remo/appliances")
-async def get_nature_remo_appliances():
-    """Nature Remo 家電一覧を取得"""
-    if nature_remo_controller is None:
-        return {"error": "Nature Remo not configured"}
-
-    appliances = await nature_remo_controller.get_appliances()
-    return appliances
-
-
 @app.post("/api/nature-remo/test")
 async def test_nature_remo():
     """Nature Remo テスト実行"""
