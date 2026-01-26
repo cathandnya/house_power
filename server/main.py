@@ -152,34 +152,6 @@ async def power_loop():
 
         await asyncio.sleep(config.POLL_INTERVAL)
 
-
-# 積算電力量ループ（無効化：リクエスト削減のため）
-# async def energy_loop():
-#     """積算電力量取得ループ"""
-#     global wisun_client, running
-#
-#     # 取得間隔（デフォルト1800秒=30分）
-#     interval = getattr(config, "ENERGY_POLL_INTERVAL", 1800)
-#
-#     # 初回は少し待ってから開始
-#     await asyncio.sleep(10)
-#
-#     while running:
-#         try:
-#             if wisun_client and hasattr(wisun_client, 'get_energy_data'):
-#                 energy = wisun_client.get_energy_data()
-#                 update_energy_data(energy)
-#
-#                 # ログ出力
-#                 if energy.get("cumulative_energy") is not None:
-#                     logging.info(f"Energy: {energy['cumulative_energy']:.1f}kWh")
-#
-#         except Exception as e:
-#             logging.error(f"Error in energy loop: {e}", exc_info=True)
-#
-#         await asyncio.sleep(interval)
-
-
 async def main():
     """メイン関数"""
     global wisun_client, running
