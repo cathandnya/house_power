@@ -980,6 +980,9 @@
                 statusSignal.querySelectorAll('.bar').forEach(bar => bar.classList.remove('active'));
                 statusText.textContent = '再接続中...';
 
+                // 再接続前にAPIで現在値を取得
+                loadPower();
+
                 // 再接続
                 setTimeout(connect, WS_RECONNECT_INTERVAL);
             };
