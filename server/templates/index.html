@@ -962,6 +962,8 @@
                 statusText.textContent = '';
                 // 接続時に電波強度も更新
                 loadConnection();
+                // 切断中のデータを埋めるため履歴を再取得
+                loadHistory();
             };
 
             ws.onmessage = (event) => {
@@ -1012,14 +1014,32 @@
                 const response = await fetch('/api/history?limit=100');
                 const history = await response.json();
 
+                // 既存データのタイムスタンプをSetで保持（重複チェック用）
+                const existingTimes = new Set(
+                    chartData.datasets[0].data.map(d => d.x.getTime())
+                );
+
+                // 新しいデータのみ追加
                 history.forEach(data => {
                     if (data.instant_power !== null && data.timestamp) {
-                        chartData.datasets[0].data.push({
-                            x: new Date(data.timestamp),
-                            y: data.instant_power
-                        });
+                        const time = new Date(data.timestamp).getTime();
+                        if (!existingTimes.has(time)) {
+                            chartData.datasets[0].data.push({
+                                x: new Date(data.timestamp),
+                                y: data.instant_power
+                            });
+                            existingTimes.add(time);
+                        }
                     }
                 });
+
+                // 時刻順にソート
+                chartData.datasets[0].data.sort((a, b) => a.x - b.x);
+
+                // 最大100件に制限
+                while (chartData.datasets[0].data.length > 100) {
+                    chartData.datasets[0].data.shift();
+                }
 
                 chart.update('none');
             } catch (e) {
