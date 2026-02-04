@@ -385,9 +385,14 @@ class WiSUNClient:
                     if len(parts) >= 4:
                         result_code = parts[-1]  # 最後の要素が結果コード
                         if result_code != "00":
-                            logging.warning(f"Send failed: EVENT 21 result={result_code}, triggering reconnect")
-                            self._needs_reconnect = True
-                            return None  # 即座に終了して再接続をトリガー
+                            logging.warning(f"Send failed: EVENT 21 result={result_code}, attempting immediate reconnect...")
+                            if self.reconnect():
+                                # 再接続成功したら即座にリトライ
+                                logging.info("Retrying after EVENT 21 reconnect...")
+                                return self._send_echonet(epc)
+                            else:
+                                logging.error("Immediate reconnect after EVENT 21 failed")
+                                return None
 
                 if line.startswith("ERXUDP"):
                     # ERXUDP応答をパース
@@ -617,10 +622,10 @@ class WiSUNClient:
         """
         data = {"instant_power": None}
 
-        # EVENT 21失敗または連続タイムアウトで再接続を試行
+        # EVENT 29（PANAセッション切断）または連続タイムアウトで再接続を試行
         if self._needs_reconnect or self.consecutive_timeouts >= self.max_timeouts_before_reconnect:
             if self._needs_reconnect:
-                logging.warning("Send failure detected (EVENT 21), attempting reconnect...")
+                logging.warning("PANA session lost (EVENT 29), attempting reconnect...")
             else:
                 logging.warning(f"Too many consecutive timeouts ({self.consecutive_timeouts}), attempting reconnect...")
             if self.reconnect():
