@@ -264,7 +264,7 @@ class WiSUNClient:
         # 再接続（SKJOINのみ、スキャン不要）
         if self.ipv6_addr:
             logging.info("Reconnecting (SKJOIN)...")
-            result = self._send_command(f"SKJOIN {self.ipv6_addr}", "EVENT 25", timeout=30)
+            result = self._send_command(f"SKJOIN {self.ipv6_addr}", "EVENT 25", timeout=10)
 
             for line in result:
                 if "EVENT 25" in line:
