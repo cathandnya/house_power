@@ -272,10 +272,11 @@ class WiSUNClient:
                 # バッファクリア
                 while self.ser.in_waiting > 0:
                     self.ser.read(self.ser.in_waiting)
-                # SKRESET後に認証情報を再設定
+                # SKRESET後に認証情報・レジスタを再設定
                 logging.info("Re-setting B-route credentials...")
                 self._send_command(f"SKSETRBID {self.broute_id}", "OK")
                 self._send_command(f"SKSETPWD C {self.broute_pwd}", "OK")
+                self._send_command("SKSREG SA2 1", "OK")  # RSSI表示を再有効化
                 if self.scan_result:
                     self._send_command(f"SKSREG S2 {self.scan_result.channel}", "OK")
                     self._send_command(f"SKSREG S3 {self.scan_result.pan_id}", "OK")
