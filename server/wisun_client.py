@@ -385,14 +385,9 @@ class WiSUNClient:
                     if len(parts) >= 4:
                         result_code = parts[-1]  # 最後の要素が結果コード
                         if result_code != "00":
-                            logging.warning(f"Send failed: EVENT 21 result={result_code}, attempting immediate reconnect...")
-                            if self.reconnect():
-                                # 再接続成功したら即座にリトライ
-                                logging.info("Retrying after EVENT 21 reconnect...")
-                                return self._send_echonet(epc)
-                            else:
-                                logging.error("Immediate reconnect after EVENT 21 failed")
-                                return None
+                            logging.warning(f"Send failed: EVENT 21 result={result_code}, will reconnect on next poll")
+                            self._needs_reconnect = True
+                            return None  # 次回ポーリングで再接続
 
                 if line.startswith("ERXUDP"):
                     # ERXUDP応答をパース
