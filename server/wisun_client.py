@@ -64,6 +64,7 @@ class WiSUNClient:
         self.consecutive_timeouts: int = 0  # 連続タイムアウト回数
         self.max_timeouts_before_reconnect: int = 2  # 再接続までの許容回数
         self._needs_reconnect: bool = False  # 即座に再接続が必要かどうか
+        self._reconnect_backoff: int = 0  # 再接続失敗後のバックオフ（ポーリング回数）
 
     def open(self) -> bool:
         """シリアルポートを開く"""
@@ -168,6 +169,15 @@ class WiSUNClient:
         if not self.open():
             return False
 
+        # アダプタ応答確認（ヘルスチェック）
+        ver_lines = self._send_command("SKVER", "OK", timeout=5)
+        ver = next((l for l in ver_lines if l.startswith("EVER")), None)
+        if ver:
+            logging.info(f"Wi-SUN adapter firmware: {ver}")
+        else:
+            logging.error("Wi-SUN adapter not responding to SKVER")
+            return False
+
         # BルートID設定
         logging.info("Setting B-route ID...")
         self._send_command(f"SKSETRBID {self.broute_id}", "OK")
@@ -255,16 +265,27 @@ class WiSUNClient:
                 logging.info("Sending SKTERM...")
                 self.ser.write(b"SKTERM\r\n")
                 time.sleep(1)
+                # SKRESET でプロトコルスタックを初期化
+                logging.info("Sending SKRESET...")
+                self.ser.write(b"SKRESET\r\n")
+                time.sleep(1)
                 # バッファクリア
                 while self.ser.in_waiting > 0:
                     self.ser.read(self.ser.in_waiting)
+                # SKRESET後に認証情報を再設定
+                logging.info("Re-setting B-route credentials...")
+                self._send_command(f"SKSETRBID {self.broute_id}", "OK")
+                self._send_command(f"SKSETPWD C {self.broute_pwd}", "OK")
+                if self.scan_result:
+                    self._send_command(f"SKSREG S2 {self.scan_result.channel}", "OK")
+                    self._send_command(f"SKSREG S3 {self.scan_result.pan_id}", "OK")
             except Exception as e:
-                logging.warning(f"SKTERM error: {e}")
+                logging.warning(f"SKTERM/SKRESET error: {e}")
 
         # 再接続（SKJOINのみ、スキャン不要）
         if self.ipv6_addr:
             logging.info("Reconnecting (SKJOIN)...")
-            result = self._send_command(f"SKJOIN {self.ipv6_addr}", "EVENT 25", timeout=10)
+            result = self._send_command(f"SKJOIN {self.ipv6_addr}", "EVENT 25", timeout=30)
 
             for line in result:
                 if "EVENT 25" in line:
@@ -295,16 +316,22 @@ class WiSUNClient:
         channel = None
         pan_id = None
         addr = None
+        lqi = None
 
         for line in lines:
-            if line.startswith("  Channel:"):
-                channel = line.split(":")[1].strip()
-            elif line.startswith("  Pan ID:"):
-                pan_id = line.split(":")[1].strip()
-            elif line.startswith("  Addr:"):
-                addr = line.split(":")[1].strip()
+            stripped = line.strip()
+            if stripped.startswith("Channel:"):
+                channel = stripped.split(":")[1].strip()
+            elif stripped.startswith("Pan ID:"):
+                pan_id = stripped.split(":")[1].strip()
+            elif stripped.startswith("Addr:"):
+                addr = stripped.split(":")[1].strip()
+            elif stripped.startswith("LQI:"):
+                lqi = stripped.split(":")[1].strip()
 
         if channel and pan_id and addr:
+            if lqi:
+                logging.info(f"Scan LQI: {lqi} (signal quality)")
             return ScanResult(channel=channel, pan_id=pan_id, addr=addr)
 
         return None
@@ -394,14 +421,17 @@ class WiSUNClient:
                     # SA2=1の場合: ERXUDP SENDER DEST RPORT LPORT SENDERLLA RSSI SECURED SIDE DATALEN DATA
                     # SA2=0の場合: ERXUDP SENDER DEST RPORT LPORT SENDERLLA SECURED SIDE DATALEN DATA
                     parts = line.split(" ")
+                    logging.debug(f"ERXUDP parts({len(parts)}): {[p[:20] for p in parts]}")
                     if len(parts) >= 11:
                         # SA2=1: RSSIあり
                         rssi_raw = int(parts[6], 16)
                         self.last_rssi = rssi_raw - 107  # dBmに変換
+                        logging.debug(f"RSSI: raw=0x{parts[6]} ({rssi_raw}) -> {self.last_rssi} dBm")
                         data = parts[10]
                         dest = parts[2]
                     elif len(parts) >= 10:
                         # SA2=0: RSSIなし
+                        logging.debug(f"ERXUDP: SA2=0 mode (no RSSI), parts[6]={parts[6]}")
                         data = parts[9]
                         dest = parts[2]
                     else:
@@ -617,6 +647,12 @@ class WiSUNClient:
         """
         data = {"instant_power": None}
 
+        # バックオフ中はスキップ
+        if self._reconnect_backoff > 0:
+            self._reconnect_backoff -= 1
+            logging.info(f"Reconnect backoff: waiting {self._reconnect_backoff + 1} more polls")
+            return data
+
         # EVENT 29（PANAセッション切断）または連続タイムアウトで再接続を試行
         if self._needs_reconnect or self.consecutive_timeouts >= self.max_timeouts_before_reconnect:
             if self._needs_reconnect:
@@ -626,11 +662,12 @@ class WiSUNClient:
             if self.reconnect():
                 self.consecutive_timeouts = 0
                 self._needs_reconnect = False
+                self._reconnect_backoff = 0
             else:
-                logging.error("Reconnection failed, will retry next time")
-                # 一旦リセットして次回も再接続を試みる
+                logging.error("Reconnection failed, backing off before retry")
                 self.consecutive_timeouts = 0
-                self._needs_reconnect = False
+                self._needs_reconnect = True  # 次回も再接続を試みる
+                self._reconnect_backoff = 12  # 12ポーリング分待機（5秒x12=60秒）
                 return data
 
         # 瞬時電力

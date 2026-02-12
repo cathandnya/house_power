@@ -209,8 +209,9 @@ async def main():
     wisun_client = create_client(mock_mode)
 
     # スマートメーターに接続（リトライあり）
-    max_retries = 3
-    retry_delay = 60  # 秒
+    # スキャンはアダプタ側の処理でメーターに負荷なし → 短間隔で多数リトライ
+    max_retries = 20
+    retry_delay = 10  # 秒
 
     for attempt in range(max_retries):
         if wisun_client.connect():
