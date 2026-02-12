@@ -9,6 +9,7 @@ REST API / WebSocket で配信する
 import argparse
 import asyncio
 import logging
+import logging.handlers
 import os
 import signal
 import sys
@@ -23,12 +24,8 @@ def setup_logging():
     log_dir = Path(__file__).parent / "logs"
     log_dir.mkdir(exist_ok=True)
 
-    # ログファイル名（起動時にクリア）
+    # ログファイル名（追記モード）
     log_file = log_dir / "server.log"
-
-    # 起動時にログファイルをクリア
-    if log_file.exists():
-        log_file.unlink()
 
     # ルートロガー設定
     logger = logging.getLogger()
@@ -49,8 +46,10 @@ def setup_logging():
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    # ファイルハンドラ
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    # ファイルハンドラ（ローテーション: 1MB x 5世代）
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=1_000_000, backupCount=5, encoding="utf-8"
+    )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -209,15 +208,36 @@ async def main():
 
     wisun_client = create_client(mock_mode)
 
-    # スマートメーターに接続
-    if not wisun_client.connect():
-        logging.error("Failed to connect to smart meter")
+    # スマートメーターに接続（リトライあり）
+    max_retries = 3
+    retry_delay = 60  # 秒
+
+    for attempt in range(max_retries):
+        if wisun_client.connect():
+            break
+
+        logging.error(f"Failed to connect to smart meter (attempt {attempt + 1}/{max_retries})")
+
+        if attempt < max_retries - 1:
+            logging.info(f"Retrying in {retry_delay} seconds...")
+            await asyncio.sleep(retry_delay)
+            # クライアント再作成
+            wisun_client.close()
+            wisun_client = create_client(mock_mode)
+            if not mock_mode:
+                logging.info(f"Connecting to Wi-SUN adapter ({config.SERIAL_PORT})...")
+    else:
+        # 全リトライ失敗
+        logging.error("All connection attempts failed")
         if not mock_mode:
             logging.error("Please check:")
             logging.error("  1. Wi-SUN adapter is connected")
             logging.error("  2. B-route ID/password is correct")
             logging.error("  3. Smart meter is in range")
             logging.error("Tip: Use --mock flag to run without hardware")
+        # 急速な再起動ループを防ぐため待機
+        logging.info("Waiting 10 minutes before exit to prevent rapid restart loop...")
+        await asyncio.sleep(600)
         sys.exit(1)
 
     logging.info(f"Starting API server on http://{config.API_HOST}:{config.API_PORT}")
