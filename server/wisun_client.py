@@ -239,6 +239,8 @@ class WiSUNClient:
                 time.sleep(0.5)
                 while self.ser and self.ser.in_waiting > 0:
                     self.ser.read(self.ser.in_waiting)
+                # PANAセッション情報をログ
+                self._log_pana_session_info()
                 return True
             if "EVENT 24" in line:
                 logging.error("Connection failed (EVENT 24)")
@@ -296,6 +298,8 @@ class WiSUNClient:
                     time.sleep(2)
                     while self.ser and self.ser.in_waiting > 0:
                         self.ser.read(self.ser.in_waiting)
+                    # PANAセッション情報をログ
+                    self._log_pana_session_info()
                     return True
                 if "EVENT 24" in line:
                     logging.error("Reconnection failed (EVENT 24)")
@@ -306,6 +310,29 @@ class WiSUNClient:
         else:
             logging.error("No IPv6 address for reconnection")
             return False
+
+    def _log_pana_session_info(self):
+        """PANA接続後にセッション関連レジスタをログ出力"""
+        try:
+            # S16: PANAセッションライフタイム（秒）
+            s16_lines = self._send_command("SKSREG S16", "OK", timeout=5)
+            for line in s16_lines:
+                if line.startswith("ESREG"):
+                    val = line.split()[-1] if len(line.split()) > 1 else "?"
+                    try:
+                        seconds = int(val, 16)
+                        hours = seconds / 3600
+                        logging.info(f"PANA session lifetime (S16): {seconds}s ({hours:.1f}h)")
+                    except ValueError:
+                        logging.info(f"PANA session lifetime (S16): {val}")
+            # S17: 自動再認証フラグ
+            s17_lines = self._send_command("SKSREG S17", "OK", timeout=5)
+            for line in s17_lines:
+                if line.startswith("ESREG"):
+                    val = line.split()[-1] if len(line.split()) > 1 else "?"
+                    logging.info(f"PANA auto re-auth (S17): {val}")
+        except Exception as e:
+            logging.warning(f"Failed to read PANA session info: {e}")
 
     def _scan(self) -> Optional[ScanResult]:
         """アクティブスキャンでスマートメーターを探す"""
@@ -367,8 +394,10 @@ class WiSUNClient:
 
         return frame
 
-    def _send_echonet(self, epc: str) -> Optional[str]:
+    def _send_echonet(self, epc: str, _retry_count: int = 0) -> Optional[str]:
         """ECHONET Lite電文を送信してEDTを取得"""
+        MAX_SEND_RETRIES = 2
+
         if not self.ser or not self.ipv6_addr:
             logging.debug(f"_send_echonet: ser={self.ser is not None}, ipv6={self.ipv6_addr}")
             return None
@@ -380,7 +409,7 @@ class WiSUNClient:
         # 注意: テセラ製Wi-SUNモジュールでは、コマンドとデータを一度に送信
         # データの後にCRLFを付けない
         cmd = f"SKSENDTO 1 {self.ipv6_addr} 0E1A 1 0 {len(frame_bytes):04X} "
-        logging.debug(f"_send_echonet: sending cmd for EPC={epc}")
+        logging.debug(f"_send_echonet: sending cmd for EPC={epc}" + (f" (retry {_retry_count})" if _retry_count else ""))
         try:
             self.ser.write(cmd.encode() + frame_bytes)
         except Exception as e:
@@ -400,7 +429,7 @@ class WiSUNClient:
                 if line:
                     logging.debug(f"_send_echonet: recv line={line[:80]}...")
 
-                # EVENT 29: PANAセッション切断通知（ライフタイム期限切れ等）
+                # EVENT 29: PANAセッション切断通知
                 if line.startswith("EVENT 29"):
                     logging.error("PANA session disconnected (EVENT 29), triggering reconnect")
                     self._needs_reconnect = True
@@ -411,11 +440,16 @@ class WiSUNClient:
                 if line.startswith("EVENT 21"):
                     parts = line.split(" ")
                     if len(parts) >= 4:
-                        result_code = parts[-1]  # 最後の要素が結果コード
+                        result_code = parts[-1]
                         if result_code != "00":
-                            logging.warning(f"Send failed: EVENT 21 result={result_code}, will reconnect on next poll")
-                            self._needs_reconnect = True
-                            return None  # 次回ポーリングで再接続
+                            if _retry_count < MAX_SEND_RETRIES:
+                                logging.warning(f"Send failed: EVENT 21 result={result_code}, retrying ({_retry_count + 1}/{MAX_SEND_RETRIES})...")
+                                time.sleep(1)
+                                return self._send_echonet(epc, _retry_count + 1)
+                            else:
+                                logging.warning(f"Send failed: EVENT 21 result={result_code}, retries exhausted, will reconnect")
+                                self._needs_reconnect = True
+                                return None
 
                 if line.startswith("ERXUDP"):
                     # ERXUDP応答をパース
@@ -449,6 +483,8 @@ class WiSUNClient:
                     result = self._parse_echonet_response(data, epc)
                     if result is not None:
                         self.consecutive_timeouts = 0  # 成功したらリセット
+                        if _retry_count > 0:
+                            logging.info(f"Send succeeded on retry {_retry_count}")
                         return result
                     else:
                         logging.debug(f"ERXUDP ignored: EPC mismatch (expected={epc}, data={data[:40]}...)")
