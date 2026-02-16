@@ -396,7 +396,7 @@ class WiSUNClient:
 
     def _send_echonet(self, epc: str, _retry_count: int = 0) -> Optional[str]:
         """ECHONET Lite電文を送信してEDTを取得"""
-        MAX_SEND_RETRIES = 2
+        MAX_SEND_RETRIES = 3
 
         if not self.ser or not self.ipv6_addr:
             logging.debug(f"_send_echonet: ser={self.ser is not None}, ipv6={self.ipv6_addr}")
