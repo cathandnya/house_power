@@ -1,5 +1,7 @@
 # 家庭電力消費量モニター
 
+[![YouTube](https://github.com/user-attachments/assets/de222a98-1262-408e-81cf-bda594e81901)](https://youtu.be/3AGWVqSVRN0?si=ZoVmECVlw2DP20qi)
+
 Wi-SUN Bルートでスマートメーターから直接電力消費量を取得し、Webダッシュボードでリアルタイム表示。REST API / WebSocketで電力データを配信するサーバー/クライアント構成。
 
 ## 特徴
