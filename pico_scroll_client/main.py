@@ -5,8 +5,15 @@ from machine import Pin
 
 from uwebsockets.client import connect
 
-import config
 import display
+
+try:
+    import config
+except ImportError:
+    display.init()
+    display.draw_error()
+    raise SystemExit("Missing config.py. Copy config.py.example to config.py")
+
 import mdns_resolve
 
 BRIGHTNESS_LEVELS = [8, 16, 32, 64, 128, 255]

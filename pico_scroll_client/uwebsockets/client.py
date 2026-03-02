@@ -4,6 +4,9 @@ import urandom
 import uasyncio as asyncio
 
 
+MAX_FRAME_SIZE = 16384
+
+
 class WebSocket:
     def __init__(self, reader, writer):
         self._reader = reader
@@ -31,6 +34,9 @@ class WebSocket:
             length = ustruct.unpack("!H", await self._read_exact(2))[0]
         elif length == 127:
             length = ustruct.unpack("!Q", await self._read_exact(8))[0]
+
+        if length > MAX_FRAME_SIZE:
+            raise OSError("frame too large: {}".format(length))
 
         mask = b""
         if masked:
@@ -86,10 +92,10 @@ class WebSocket:
     async def close(self):
         if self._closed:
             return
-        self._closed = True
         try:
             await self._send_frame(b"", opcode=0x8)
         finally:
+            self._closed = True
             await self._writer.drain()
             self._writer.close()
 
@@ -137,13 +143,22 @@ async def connect(url):
     await writer.drain()
 
     status_line = await reader.readline()
-    if b"101" not in status_line:
+    parts = status_line.split(b" ", 2)
+    if len(parts) < 2 or parts[1] != b"101":
         writer.close()
         raise OSError("websocket handshake failed")
 
+    headers = {}
     while True:
         line = await reader.readline()
         if line in (b"\r\n", b"\n", b""):
             break
+        if b":" in line:
+            k, v = line.split(b":", 1)
+            headers[k.strip().lower()] = v.strip()
+
+    if headers.get(b"upgrade", b"").lower() != b"websocket":
+        writer.close()
+        raise OSError("missing Upgrade: websocket header")
 
     return WebSocket(reader, writer)

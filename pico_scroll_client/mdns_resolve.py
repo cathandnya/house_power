@@ -29,7 +29,23 @@ def _skip_name(data, offset):
     return offset
 
 
-def _parse_response(data):
+def _read_name(data, offset):
+    parts = []
+    while offset < len(data):
+        if data[offset] & 0xC0 == 0xC0:
+            ptr = struct.unpack(">H", data[offset:offset + 2])[0] & 0x3FFF
+            suffix, _ = _read_name(data, ptr)
+            parts.append(suffix)
+            return ".".join(parts), offset + 2
+        if data[offset] == 0:
+            return ".".join(parts), offset + 1
+        length = data[offset]
+        parts.append(data[offset + 1:offset + 1 + length].decode())
+        offset += 1 + length
+    return ".".join(parts), offset
+
+
+def _parse_response(data, expected_name):
     if len(data) < 12:
         return None
 
@@ -44,17 +60,18 @@ def _parse_response(data):
     for _ in range(ancount):
         if offset >= len(data):
             break
-        offset = _skip_name(data, offset)
+        rr_name, offset = _read_name(data, offset)
         if offset + 10 > len(data):
             break
 
         rtype, rclass, ttl, rdlength = struct.unpack(">HHIH", data[offset:offset + 10])
         offset += 10
 
-        if rtype == 1 and rdlength == 4 and offset + 4 <= len(data):
-            return "{}.{}.{}.{}".format(
-                data[offset], data[offset + 1], data[offset + 2], data[offset + 3]
-            )
+        if rtype == 1 and (rclass & 0x7FFF) == 1 and rdlength == 4 and offset + 4 <= len(data):
+            if rr_name.lower() == expected_name.lower():
+                return "{}.{}.{}.{}".format(
+                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3]
+                )
 
         offset += rdlength
 
@@ -74,7 +91,7 @@ def resolve(hostname, timeout=3):
         while True:
             try:
                 data, addr = sock.recvfrom(512)
-                ip = _parse_response(data)
+                ip = _parse_response(data, hostname)
                 if ip:
                     return ip
             except OSError:

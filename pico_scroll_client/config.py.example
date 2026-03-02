@@ -1,0 +1,17 @@
+SSID = "your_wifi_ssid"
+PASSWORD = "your_wifi_password"
+
+# Server settings
+SERVER_HOST = "your_server.local"
+SERVER_PORT = 8000
+SERVER_PATH = "/ws/power"
+
+# Reconnect wait (seconds)
+RECONNECT_INTERVAL = 5
+
+# Warning threshold (W)
+WARNING_THRESHOLD = 5000
+
+# Display settings
+BRIGHTNESS = 255
+BLINK_INTERVAL_MS = 500

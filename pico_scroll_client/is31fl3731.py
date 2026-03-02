@@ -50,15 +50,13 @@ class PicoScroll:
 
     def show(self):
         self._bank(0)
-        # 全144レジスタをクリアしてからバッファの値を書き込む
         hw = bytearray(144)
         for y in range(HEIGHT):
             for x in range(WIDTH):
                 offset = self._pixel_addr(x, y)
                 if 0 <= offset < 144:
                     hw[offset] = self._buf[y * WIDTH + x]
-        for i in range(144):
-            self._write_reg(COLOR_OFFSET + i, hw[i])
+        self.i2c.writeto_mem(I2C_ADDR, COLOR_OFFSET, hw)
 
     def _pixel_addr(self, x, y):
         """Pimoroniのマッピングアルゴリズム（C実装から移植）"""

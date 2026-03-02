@@ -116,17 +116,18 @@ sudo systemctl enable house-power
 sudo systemctl start house-power
 ```
 
-## Pico Scroll Pack クライアント（Pico W）
+## Pico Scroll Pack クライアント（Pico 2 WH）
 
-Raspberry Pi Pico W + Pimoroni Pico Scroll Pack で電力値を表示する MicroPython クライアントです。
+Raspberry Pi Pico 2 WH + Pimoroni Pico Scroll Pack で電力値を表示する MicroPython クライアントです。
 
 ### セットアップ
 
 1. Pimoroni MicroPython ファームウェアを書き込み
-   `https://github.com/pimoroni/pimoroni-pico/releases` の `.uf2` を使用
-2. `pico_scroll_client/` 配下のファイルを Pico W にアップロード
-3. `pico_scroll_client/config.py` を編集して Wi-Fi とサーバー URL を設定
-4. `main.py` を実行
+   `https://github.com/pimoroni/pimoroni-pico-rp2350/releases` の `.uf2` を使用
+2. `pico_scroll_client/config.py.example` を `config.py` にコピー
+3. `config.py` を編集して Wi-Fi とサーバー設定を変更
+4. `pico_scroll_client/` 配下のファイルと `config.py` を Pico にアップロード
+5. Pico を再起動して `main.py` を実行
 
 WebSocket のエンドポイントは `ws://<サーバーIP>:8000/ws/power` です。
 
@@ -224,9 +225,11 @@ house_power/
 │   └── requirements.txt
 ├── pico_scroll_client/      # Pico Scroll Pack クライアント
 │   ├── main.py              # メインスクリプト
-│   ├── config.py            # Wi-Fi / サーバー設定
-│   ├── font.py              # 3x5 数字フォント
+│   ├── config.py.example    # Wi-Fi / サーバー設定のサンプル
+│   ├── is31fl3731.py        # IS31FL3731 I2Cドライバー
 │   ├── display.py           # 表示ヘルパー
+│   ├── font.py              # 3x5 数字フォント
+│   ├── mdns_resolve.py      # mDNSリゾルバ
 │   └── uwebsockets/         # WebSocket クライアント
 ├── .github/
 │   └── workflows/
