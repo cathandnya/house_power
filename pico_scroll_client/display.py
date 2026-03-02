@@ -11,12 +11,10 @@ DIGIT_WIDTH = 3
 DIGIT_HEIGHT = 5
 DIGIT_SPACING = 1
 MAX_DIGITS = 4
-LEFT_MARGIN = WIDTH - (DIGIT_WIDTH * MAX_DIGITS + DIGIT_SPACING * (MAX_DIGITS - 1))
+LEFT_MARGIN = 1
 TOP_MARGIN = (HEIGHT - DIGIT_HEIGHT) // 2
 
 ANIMATION_STEP_DELAY_MS = 40
-WARNING_RATIO = 0.75
-WATT_PER_AMP = 100
 
 
 def init():
@@ -33,6 +31,11 @@ def clear():
 
 def toggle_flip():
     _scroll.flipped = not _scroll.flipped
+
+
+def _draw_warning_corners(brightness):
+    for x, y in ((0, 0), (0, HEIGHT - 1), (WIDTH - 1, 0), (WIDTH - 1, HEIGHT - 1)):
+        _scroll.set_pixel(x, y, brightness)
 
 
 def _set_pixel_safe(x, y, brightness):
@@ -65,7 +68,7 @@ def draw_digit_partial(x, digit, offset, brightness=255):
     _draw_digit_at(x, digit, TOP_MARGIN + offset, brightness)
 
 
-def draw_text(text, brightness=255):
+def draw_text(text, brightness=255, warning_brightness=0):
     text = str(text)
     if len(text) > MAX_DIGITS:
         text = text[-MAX_DIGITS:]
@@ -75,6 +78,8 @@ def draw_text(text, brightness=255):
     for idx, ch in enumerate(text):
         x = LEFT_MARGIN + idx * (DIGIT_WIDTH + DIGIT_SPACING)
         _draw_digit_at(x, ch, TOP_MARGIN, brightness)
+    if warning_brightness:
+        _draw_warning_corners(warning_brightness)
     _scroll.show()
 
 
@@ -92,22 +97,22 @@ def _normalize_value(value):
     return value
 
 
-def draw_number(number, brightness=255):
+def draw_number(number, brightness=255, warning_brightness=0):
     value = _normalize_value(number)
     if value is None:
         draw_error()
         return
 
-    draw_text(str(value), brightness)
+    draw_text(str(value), brightness, warning_brightness)
 
 
 def draw_error():
     draw_text("---")
 
 
-def is_warning(power, contract_amperage):
+def is_warning(power, threshold):
     try:
-        return int(power) >= int(contract_amperage) * WATT_PER_AMP * WARNING_RATIO
+        return int(power) >= int(threshold)
     except (TypeError, ValueError):
         return False
 
@@ -128,14 +133,14 @@ async def animate_digit(x, old_digit, new_digit, brightness=255):
         await asyncio.sleep_ms(ANIMATION_STEP_DELAY_MS)
 
 
-async def update_display(old_value, new_value, brightness=255):
+async def update_display(old_value, new_value, brightness=255, warning_brightness=0):
     new_value = _normalize_value(new_value)
     if new_value is None:
         draw_error()
         return
 
     if old_value is None:
-        draw_number(new_value, brightness)
+        draw_number(new_value, brightness, warning_brightness)
         return
 
     old_value = _normalize_value(old_value)
@@ -160,5 +165,7 @@ async def update_display(old_value, new_value, brightness=255):
                 _draw_digit_at(x, old_digit, TOP_MARGIN - step, brightness)
                 new_y = TOP_MARGIN + total - step
                 _draw_digit_at(x, new_digit, new_y, brightness)
+        if warning_brightness:
+            _draw_warning_corners(warning_brightness)
         _scroll.show()
         await asyncio.sleep_ms(ANIMATION_STEP_DELAY_MS)

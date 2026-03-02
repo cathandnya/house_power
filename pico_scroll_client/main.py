@@ -50,7 +50,7 @@ async def button_loop(state, display_lock):
             state["brightness"] = BRIGHTNESS_LEVELS[state["bright_idx"]]
             if state["current"] is not None:
                 async with display_lock:
-                    display.draw_number(state["current"], state["brightness"])
+                    display.draw_number(state["current"], state["brightness"], 255 if state["warning"] else 0)
             while BTN_A.value() == 0 or BTN_B.value() == 0:
                 await asyncio.sleep_ms(50)
         if BTN_X.value() == 0 or BTN_Y.value() == 0:
@@ -58,7 +58,7 @@ async def button_loop(state, display_lock):
             display.toggle_flip()
             if state["current"] is not None:
                 async with display_lock:
-                    display.draw_number(state["current"], state["brightness"])
+                    display.draw_number(state["current"], state["brightness"], 255 if state["warning"] else 0)
             else:
                 async with display_lock:
                     display.draw_error()
@@ -73,7 +73,7 @@ async def blink_loop(state, display_lock):
             state["blink_on"] = not state["blink_on"]
             brightness = state["brightness"] if state["blink_on"] else 0
             async with display_lock:
-                display.draw_number(state["current"], brightness)
+                display.draw_number(state["current"], brightness, 255)
             await asyncio.sleep_ms(config.BLINK_INTERVAL_MS)
         else:
             state["blink_on"] = True
@@ -110,10 +110,10 @@ async def websocket_loop(state, display_lock):
 
                 old_value = state["current"]
                 state["current"] = power
-                state["warning"] = display.is_warning(power, config.CONTRACT_AMPERAGE)
+                state["warning"] = display.is_warning(power, config.WARNING_THRESHOLD)
 
                 async with display_lock:
-                    await display.update_display(old_value, power, state["brightness"])
+                    await display.update_display(old_value, power, state["brightness"], 255 if state["warning"] else 0)
         except Exception:
             state["ws"] = None
             state["current"] = None
