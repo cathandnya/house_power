@@ -7,6 +7,7 @@ from uwebsockets.client import connect
 
 import config
 import display
+import mdns_resolve
 
 BRIGHTNESS_LEVELS = [8, 16, 32, 64, 128, 255]
 
@@ -92,7 +93,7 @@ async def keepalive_loop(state):
 async def websocket_loop(state, display_lock):
     while True:
         try:
-            ws = await connect(config.SERVER_URL)
+            ws = await connect(state["server_url"])
             state["ws"] = ws
 
             while True:
@@ -130,12 +131,22 @@ async def main():
 
     await connect_wifi()
 
+    server_ip = mdns_resolve.resolve(config.SERVER_HOST)
+    if server_ip is None:
+        server_ip = mdns_resolve.resolve(config.SERVER_HOST)
+    server_url = "ws://{}:{}{}".format(
+        server_ip or config.SERVER_HOST,
+        config.SERVER_PORT,
+        config.SERVER_PATH,
+    )
+
     bright_idx = BRIGHTNESS_LEVELS.index(config.BRIGHTNESS) if config.BRIGHTNESS in BRIGHTNESS_LEVELS else len(BRIGHTNESS_LEVELS) - 1
     state = {
         "current": None,
         "warning": False,
         "blink_on": True,
         "ws": None,
+        "server_url": server_url,
         "brightness": BRIGHTNESS_LEVELS[bright_idx],
         "bright_idx": bright_idx,
     }
