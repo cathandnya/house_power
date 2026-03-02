@@ -1,7 +1,9 @@
-import picoscroll
 import uasyncio as asyncio
 
+from is31fl3731 import PicoScroll
 import font
+
+_scroll = None
 
 WIDTH = 17
 HEIGHT = 7
@@ -18,18 +20,24 @@ WATT_PER_AMP = 100
 
 
 def init():
-    picoscroll.init()
+    global _scroll
+    _scroll = PicoScroll()
+    _scroll.init()
     clear()
 
 
 def clear():
-    picoscroll.clear()
-    picoscroll.show()
+    _scroll.clear()
+    _scroll.show()
+
+
+def toggle_flip():
+    _scroll.flipped = not _scroll.flipped
 
 
 def _set_pixel_safe(x, y, brightness):
     if 0 <= x < WIDTH and 0 <= y < HEIGHT:
-        picoscroll.set_pixel(x, y, brightness)
+        _scroll.set_pixel(x, y, brightness)
 
 
 def _clear_digit_area(x):
@@ -61,13 +69,13 @@ def draw_text(text, brightness=255):
     text = str(text)
     if len(text) > MAX_DIGITS:
         text = text[-MAX_DIGITS:]
-    text = text.rjust(MAX_DIGITS)
+    text = (" " * (MAX_DIGITS - len(text)) + text)
 
-    picoscroll.clear()
+    _scroll.clear()
     for idx, ch in enumerate(text):
         x = LEFT_MARGIN + idx * (DIGIT_WIDTH + DIGIT_SPACING)
         _draw_digit_at(x, ch, TOP_MARGIN, brightness)
-    picoscroll.show()
+    _scroll.show()
 
 
 def _normalize_value(value):
@@ -107,14 +115,16 @@ def is_warning(power, contract_amperage):
 async def animate_digit(x, old_digit, new_digit, brightness=255):
     if old_digit == new_digit:
         draw_digit(x, new_digit, brightness)
-        picoscroll.show()
+        _scroll.show()
         return
 
-    for step in range(DIGIT_HEIGHT + 1):
+    total = DIGIT_HEIGHT + TOP_MARGIN
+    for step in range(total + 1):
         _clear_digit_area(x)
         _draw_digit_at(x, old_digit, TOP_MARGIN - step, brightness)
-        _draw_digit_at(x, new_digit, TOP_MARGIN + DIGIT_HEIGHT - step, brightness)
-        picoscroll.show()
+        new_y = TOP_MARGIN + total - step
+        _draw_digit_at(x, new_digit, new_y, brightness)
+        _scroll.show()
         await asyncio.sleep_ms(ANIMATION_STEP_DELAY_MS)
 
 
@@ -132,11 +142,14 @@ async def update_display(old_value, new_value, brightness=255):
     if old_value is None:
         old_value = 0
 
-    old_text = str(old_value).rjust(MAX_DIGITS)
-    new_text = str(new_value).rjust(MAX_DIGITS)
+    old_s = str(old_value)
+    old_text = " " * (MAX_DIGITS - len(old_s)) + old_s
+    new_s = str(new_value)
+    new_text = " " * (MAX_DIGITS - len(new_s)) + new_s
 
-    for step in range(DIGIT_HEIGHT + 1):
-        picoscroll.clear()
+    total = DIGIT_HEIGHT + TOP_MARGIN
+    for step in range(total + 1):
+        _scroll.clear()
         for idx in range(MAX_DIGITS):
             x = LEFT_MARGIN + idx * (DIGIT_WIDTH + DIGIT_SPACING)
             old_digit = old_text[idx]
@@ -145,6 +158,7 @@ async def update_display(old_value, new_value, brightness=255):
                 _draw_digit_at(x, new_digit, TOP_MARGIN, brightness)
             else:
                 _draw_digit_at(x, old_digit, TOP_MARGIN - step, brightness)
-                _draw_digit_at(x, new_digit, TOP_MARGIN + DIGIT_HEIGHT - step, brightness)
-        picoscroll.show()
+                new_y = TOP_MARGIN + total - step
+                _draw_digit_at(x, new_digit, new_y, brightness)
+        _scroll.show()
         await asyncio.sleep_ms(ANIMATION_STEP_DELAY_MS)
