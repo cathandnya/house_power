@@ -152,6 +152,18 @@ async def update_display(old_value, new_value, brightness=255, warning_brightnes
     new_s = str(new_value)
     new_text = " " * (MAX_DIGITS - len(new_s)) + new_s
 
+    # 桁ごとにスクロール方向を決定（数字が増えたら上へ、減ったら下へ）
+    directions = []
+    for idx in range(MAX_DIGITS):
+        o = old_text[idx]
+        n = new_text[idx]
+        if o == n:
+            directions.append(1)
+        else:
+            ov = -1 if o == " " else int(o)
+            nv = -1 if n == " " else int(n)
+            directions.append(1 if nv >= ov else -1)
+
     total = DIGIT_HEIGHT + TOP_MARGIN
     for step in range(total + 1):
         _scroll.clear()
@@ -159,11 +171,12 @@ async def update_display(old_value, new_value, brightness=255, warning_brightnes
             x = LEFT_MARGIN + idx * (DIGIT_WIDTH + DIGIT_SPACING)
             old_digit = old_text[idx]
             new_digit = new_text[idx]
+            d = directions[idx]
             if old_digit == new_digit:
                 _draw_digit_at(x, new_digit, TOP_MARGIN, brightness)
             else:
-                _draw_digit_at(x, old_digit, TOP_MARGIN - step, brightness)
-                new_y = TOP_MARGIN + total - step
+                _draw_digit_at(x, old_digit, TOP_MARGIN - step * d, brightness)
+                new_y = TOP_MARGIN + (total - step) * d
                 _draw_digit_at(x, new_digit, new_y, brightness)
         if warning_brightness:
             _draw_warning_corners(warning_brightness)
