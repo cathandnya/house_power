@@ -2,6 +2,8 @@
 
 [![YouTube](https://github.com/user-attachments/assets/de222a98-1262-408e-81cf-bda594e81901)](https://youtu.be/3AGWVqSVRN0?si=ZoVmECVlw2DP20qi)
 
+[![YouTube](https://github.com/user-attachments/assets/20929761-2df1-428b-aeff-bbd420b6128f)](https://youtu.be/yYt9wXE0pI8?si=BxjFTPFTwm938WVA)
+
 Wi-SUN Bルートでスマートメーターから直接電力消費量を取得し、Webダッシュボードでリアルタイム表示。REST API / WebSocketで電力データを配信するサーバー/クライアント構成。
 
 ## 特徴
