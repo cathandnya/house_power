@@ -34,8 +34,11 @@ import api
 
 
 @pytest.fixture(autouse=True)
-def reset_state():
+def reset_state(tmp_path):
     """各テスト前に状態をリセット"""
+    # POST /api/settings は _save_settings() で設定ファイルを実際に書き換えるため、
+    # 書き込み先を一時ディレクトリへ逃がして server/settings.json を保護する
+    api._settings_file = tmp_path / "settings.json"
     current_data["instant_power"] = None
     current_data["timestamp"] = None
     connection_info["channel"] = None
