@@ -64,6 +64,12 @@ class WiSUNClient:
         self.consecutive_timeouts: int = 0  # 連続タイムアウト回数
         self.max_timeouts_before_reconnect: int = 2  # 再接続までの許容回数
         self._needs_reconnect: bool = False  # 即座に再接続が必要かどうか
+        # シリアルデバイス自体を開き直す必要があるかどうか。
+        # USB を抜き差しすると by-id のリンク先が ttyUSB0 → ttyUSB1 のように
+        # 変わるが、既に開いたファイルディスクリプタは古いデバイスを指したまま
+        # なので、以後の write は永久に Errno 5 (I/O error) になる。
+        # PANA セッションの張り直し（SKTERM/SKRESET）では復旧しない。
+        self._needs_reopen: bool = False
         self._reconnect_backoff: int = 0  # 再接続失敗後のバックオフ（ポーリング回数）
 
     def open(self) -> bool:
@@ -102,7 +108,15 @@ class WiSUNClient:
             return []
 
         # 送信
-        self.ser.write((cmd + "\r\n").encode())
+        # デバイスが消えていると OSError/SerialException が飛ぶ。ここで潰さないと
+        # 呼び出し元（connect など）まで例外が伝播して落ちるので、開き直しが必要だと
+        # 記録して空を返す。
+        try:
+            self.ser.write((cmd + "\r\n").encode())
+        except Exception as e:
+            logging.error(f"_send_command: write error: {e}")
+            self._needs_reopen = True
+            return []
 
         # 受信
         lines = []
@@ -112,8 +126,20 @@ class WiSUNClient:
             if time.time() - start_time > timeout:
                 break
 
-            if self.ser.in_waiting > 0:
-                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+            try:
+                available = self.ser.in_waiting > 0
+            except Exception as e:
+                logging.error(f"_send_command: in_waiting error: {e}")
+                self._needs_reopen = True
+                return lines
+
+            if available:
+                try:
+                    line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                except Exception as e:
+                    logging.error(f"_send_command: readline error: {e}")
+                    self._needs_reopen = True
+                    return lines
                 if line:
                     lines.append(line)
                     if wait_for and wait_for in line:
@@ -260,6 +286,28 @@ class WiSUNClient:
             再接続成功したらTrue
         """
         logging.warning("Attempting reconnection...")
+
+        # デバイスが消えている場合は、既存のハンドルに SKTERM を書いても復旧しない。
+        # USB を抜き差しすると by-id のリンク先が変わるので (ttyUSB0 → ttyUSB1)、
+        # 一度閉じて開き直す。self.port は by-id の安定パスなので、開き直せば
+        # 現在の ttyUSB* に解決される。
+        # connect() はキャッシュ (wisun_cache.json) を使うのでスキャンは走らず、
+        # メーターへの負荷も増えない。
+        if self._needs_reopen or not self.ser or not self.ser.is_open:
+            logging.warning("Serial device appears to be gone; reopening port...")
+            try:
+                self.close()
+            except Exception as e:
+                logging.debug(f"close() during reopen failed (ignored): {e}")
+            self.ser = None
+            self._needs_reopen = False
+            if self.connect():
+                logging.info("Reopened serial port and reconnected")
+                return True
+            logging.error("Reopen failed")
+            # 次回も開き直しから試す
+            self._needs_reopen = True
+            return False
 
         # まず SKTERM で明示的に切断を試行
         if self.ser and self.ser.is_open:
@@ -413,7 +461,11 @@ class WiSUNClient:
         try:
             self.ser.write(cmd.encode() + frame_bytes)
         except Exception as e:
+            # これまではここで None を返すだけだったので、デバイスが消えても
+            # 再接続が発火せず、3秒ごとに同じエラーを出し続けていた。
             logging.error(f"_send_echonet: write error: {e}")
+            self._needs_reopen = True
+            self._needs_reconnect = True
             return None
 
         # 応答待ち（5秒タイムアウト）
@@ -424,6 +476,8 @@ class WiSUNClient:
                     line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                 except Exception as e:
                     logging.error(f"_send_echonet: readline error: {e}")
+                    self._needs_reopen = True
+                    self._needs_reconnect = True
                     return None
 
                 if line:
@@ -691,8 +745,11 @@ class WiSUNClient:
             return data
 
         # EVENT 29（PANAセッション切断）または連続タイムアウトで再接続を試行
-        if self._needs_reconnect or self.consecutive_timeouts >= self.max_timeouts_before_reconnect:
-            if self._needs_reconnect:
+        if (self._needs_reopen or self._needs_reconnect
+                or self.consecutive_timeouts >= self.max_timeouts_before_reconnect):
+            if self._needs_reopen:
+                logging.warning("Serial device lost, attempting to reopen...")
+            elif self._needs_reconnect:
                 logging.warning("PANA session lost (EVENT 29), attempting reconnect...")
             else:
                 logging.warning(f"Too many consecutive timeouts ({self.consecutive_timeouts}), attempting reconnect...")
