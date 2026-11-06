@@ -120,3 +120,44 @@ def test_healthy_path_does_not_reopen():
         c.get_power_data()
 
     reconnect.assert_not_called()
+
+
+class QuietSerial:
+    """応答が何も返ってこないハンドル (SKJOIN が毎回タイムアウトする状態)。"""
+    is_open = True
+    in_waiting = 0
+
+    def write(self, _data):
+        pass
+
+    def readline(self):
+        return b""
+
+    def read(self, _n):
+        return b""
+
+    def close(self):
+        pass
+
+
+def test_repeated_reconnect_timeouts_escalate_to_reopen():
+    """SKJOIN の再接続が続けて失敗したら、次は開き直し (connect) に切り替えること。
+
+    実際に起きた障害: 2026-11-07、SKTERM/SKRESET → SKJOIN が 8 時間 (390 回) 応答なしで
+    失敗し続けた。同じキャッシュのまま外から開き直して SKJOIN すると 1 回でつながった。
+    """
+    c = make_client()
+    c.ser = QuietSerial()
+    c.ipv6_addr = "FE80::1"
+
+    with patch.object(WiSUNClient, "_send_command", return_value=[]), \
+            patch("wisun_client.time.sleep"):
+        for _ in range(c.max_reconnect_failures_before_reopen - 1):
+            assert c.reconnect() is False
+            assert c._needs_reopen is False
+        assert c.reconnect() is False
+    assert c._needs_reopen is True, "失敗が続いても SKJOIN だけを繰り返している"
+
+    with patch.object(WiSUNClient, "connect", return_value=True) as connect:
+        assert c.reconnect() is True
+    connect.assert_called_once()

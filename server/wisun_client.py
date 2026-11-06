@@ -71,6 +71,12 @@ class WiSUNClient:
         # PANA セッションの張り直し（SKTERM/SKRESET）では復旧しない。
         self._needs_reopen: bool = False
         self._reconnect_backoff: int = 0  # 再接続失敗後のバックオフ（ポーリング回数）
+        # SKTERM/SKRESET → SKJOIN の再接続が続けて失敗した回数。上限に達したら開き直し
+        # (起動時と同じ connect()) に切り替える。2026-11-07 にこの経路が 8 時間 (390 回)
+        # 応答なしのまま失敗し続け、同じメーター・同じキャッシュでもプロセスの外から
+        # 開き直して SKJOIN すると 1 回でつながった
+        self._reconnect_failures: int = 0
+        self.max_reconnect_failures_before_reopen: int = 3
 
     def open(self) -> bool:
         """シリアルポートを開く"""
@@ -303,6 +309,7 @@ class WiSUNClient:
             self._needs_reopen = False
             if self.connect():
                 logging.info("Reopened serial port and reconnected")
+                self._reconnect_failures = 0
                 return True
             logging.error("Reopen failed")
             # 次回も開き直しから試す
@@ -342,6 +349,7 @@ class WiSUNClient:
                 if "EVENT 25" in line:
                     logging.info("Reconnected successfully!")
                     self.consecutive_timeouts = 0
+                    self._reconnect_failures = 0
                     # PANAセッション安定待ち＆バッファクリア
                     time.sleep(2)
                     while self.ser and self.ser.in_waiting > 0:
@@ -351,13 +359,24 @@ class WiSUNClient:
                     return True
                 if "EVENT 24" in line:
                     logging.error("Reconnection failed (EVENT 24)")
-                    return False
+                    return self._reconnect_failed()
 
             logging.error("Reconnection timeout")
-            return False
+            return self._reconnect_failed()
         else:
             logging.error("No IPv6 address for reconnection")
             return False
+
+    def _reconnect_failed(self) -> bool:
+        """SKJOIN による再接続の失敗を数え、続いたら次回は開き直しから試す。"""
+        self._reconnect_failures += 1
+        if self._reconnect_failures >= self.max_reconnect_failures_before_reopen:
+            logging.warning(
+                f"Reconnection failed {self._reconnect_failures} times in a row; "
+                "reopening the serial port next time")
+            self._needs_reopen = True
+            self._reconnect_failures = 0
+        return False
 
     def _log_pana_session_info(self):
         """PANA接続後にセッション関連レジスタをログ出力"""
